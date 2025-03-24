@@ -275,7 +275,7 @@ def generate_noisy_speech_sample(
         target_len_noise = int(np.floor(noise_info.samplerate * duration))
 
         noise_start_index = np.random.randint(
-            np.clip(noise_len - target_len_noise + 1, 1, np.Inf)
+            np.clip(noise_len - target_len_noise + 1, 1, np.inf)
         )
 
         n, fs_noise = soundfile.read(

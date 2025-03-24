@@ -15,3 +15,4 @@ webrtcvad
 librosa
 pandas
 onnxruntime
+tensorboard

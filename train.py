@@ -120,8 +120,8 @@ def main():
     )
     scheduler = torch.optim.lr_scheduler.StepLR(
         optim,
-        1,
-        gamma=(config["lr_stop"] / config["lr_start"]) ** (1 / config["max_steps"]),
+        config["lr_update_interval"],
+        gamma=(config["lr_stop"] / config["lr_start"]) ** (1 / (config["max_steps"]/config["lr_update_interval"])),
     )
 
     chkpt_dir = os.path.join(
@@ -131,16 +131,16 @@ def main():
 
     if config["resume"]:
         try:
-            chkpt = torch.load(os.path.join(chkpt_dir, "latest"))
+            chkpt = torch.load(os.path.join(chkpt_dir, "latest"), weights_only=False)
             optim.load_state_dict(chkpt["optim"])
             denoise_net.load_state_dict(chkpt["denoiser"])
             scheduler.load_state_dict(chkpt["scheduler"])
             best_metric, steps = chkpt["best_metric"], chkpt["steps"]
         except FileNotFoundError:
             print("Checkpoint file not found. Starting from scratch.")
-            best_metric, steps = -np.Inf, 0
+            best_metric, steps = -np.inf, 0
     else:
-        best_metric, steps = -np.Inf, 0
+        best_metric, steps = -np.inf, 0
 
     log_dir = os.path.join(pathconfig["chkpt_logs_path"], "logs", config["train_name"])
     os.makedirs(log_dir, exist_ok=True)
@@ -187,7 +187,7 @@ def main():
             scheduler.step()
 
             if steps % 10 == 0:
-                pbar.set_description(f"Steps : {steps}, Loss : {loss.detach().cpu().numpy()}")
+                pbar.set_description(f"Steps : {steps}, Loss : {loss.detach().cpu().numpy()}, LR : {scheduler.get_last_lr()[0]}")
 
             if steps % config["val_interval"] == 0:
                 torch.save(
