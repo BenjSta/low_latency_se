@@ -297,7 +297,7 @@ def generate_noisy_speech_sample(
 
         n = n[:target_len]
 
-        # trucnated normal distribution
+        # truncated normal distribution
         while True:
             target_snr = np.random.normal(snr_mu_and_sigma[0], snr_mu_and_sigma[1])
             if (
@@ -333,6 +333,7 @@ class NoisySpeechDataset(data.Dataset):
         apply_noise,
         rir_percentage,
         fs,
+        weighted_sampling=False,
     ):
         self.speech_filepath_list = speech_filepath_list
         self.noise_filepath_list = noise_filepath_list
@@ -345,11 +346,22 @@ class NoisySpeechDataset(data.Dataset):
         self.fs = fs
 
         self.length = len(speech_filepath_list)
+        if weighted_sampling:
+            self.weights = np.array(
+                [soundfile.info(f).frames for f in tqdm.tqdm(self.speech_filepath_list)]
+            )
+            self.weights = self.weights / np.sum(self.weights)
+        else:
+            self.weights = None
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, item):
+        if self.weights is not None:
+            # do not use item from dataloader sampler, but sample randomly
+            item = np.random.choice(self.length, p=self.weights)
+
         speech_filepath = self.speech_filepath_list[item]
         ind = np.random.randint(len(self.noise_filepath_list))
         if self.apply_noise:

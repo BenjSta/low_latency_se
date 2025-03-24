@@ -1,4 +1,4 @@
-resume = true
+resume = false
 
 batch_size=32
 fs = 16000
@@ -12,11 +12,15 @@ num_workers = 14
 data_distribution_seed = 1
 
 [model]
-hopsize = 80
+hopsize = 160
 winlen = 320
-method = "complex_filter"
+method = "time_domain_filtering"
 num_filter_frames = 1
 learnable_transforms = true
+algorithmic_delay_nn=80
+algorithmic_delay_filtering=80
+adaptive_phase_shift=false
+linphase_regressor_hidden_size=1
 
 [model.crn_config]
 num_channels_encoder = [2, 32, 48, 64, 80]

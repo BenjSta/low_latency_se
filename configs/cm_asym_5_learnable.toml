@@ -12,7 +12,7 @@ num_workers = 14
 data_distribution_seed = 1
 
 [model]
-hopsize = 80
+hopsize = 40
 winlen = 320
 method = "complex_filter"
 num_filter_frames = 1

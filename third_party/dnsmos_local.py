@@ -21,8 +21,13 @@ INPUT_LENGTH = 9.01
 
 class ComputeScore:
     def __init__(self, primary_model_path, p808_model_path) -> None:
-        self.onnx_sess = ort.InferenceSession(primary_model_path)
-        self.p808_onnx_sess = ort.InferenceSession(p808_model_path)
+        sess_options = ort.SessionOptions()
+        
+        # Enable GPU if available
+        providers = ['CUDAExecutionProvider', 'CPUExecutionProvider'] if ort.get_device() == 'GPU' else ['CPUExecutionProvider']
+        
+        self.onnx_sess = ort.InferenceSession(primary_model_path, providers=providers)
+        self.p808_onnx_sess = ort.InferenceSession(p808_model_path, providers=providers)
         
     def audio_melspec(self, audio, n_mels=120, frame_size=320, hop_length=160, sr=16000, to_db=True):
         mel_spec = librosa.feature.melspectrogram(y=audio, sr=sr, n_fft=frame_size+1, hop_length=hop_length, n_mels=n_mels)

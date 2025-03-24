@@ -12,14 +12,15 @@ num_workers = 14
 data_distribution_seed = 1
 
 [model]
-hopsize = 80
+hopsize = 40
 winlen = 320
 method = "complex_filter"
 num_filter_frames = 1
-learnable_transforms = true
+learnable_transforms = false
+downsample_factor = 2
 
 [model.crn_config]
-num_channels_encoder = [2, 32, 48, 64, 80]
+num_channels_encoder = [2, 16, 32, 48, 64]
 kernel_sizes = [[5, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3], [1, 3]]
 fstride = 2
 n_gru_layers = 1

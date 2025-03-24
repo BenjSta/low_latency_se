@@ -17,6 +17,7 @@ winlen = 320
 method = "complex_filter"
 num_filter_frames = 1
 learnable_transforms = true
+downsample_factor = 2
 
 [model.crn_config]
 num_channels_encoder = [2, 32, 48, 64, 80]

@@ -10,7 +10,7 @@ import tqdm
 import os
 from ptflops import get_model_complexity_info
 import torch
-from metrics import compute_dnsmos, compute_pesq, compute_mean_wacc
+from metrics import compute_dnsmos, compute_pesq, compute_distillmos, compute_xlsr_sqa_mos, compute_sisdr
 from dataset import NoisySpeechDataset, load_paths
 from models import SpeechEnhancementModel
 from losses import complex_compressed_spec_mse
@@ -258,7 +258,7 @@ def validate(
     for batch in tqdm.tqdm(val_dataloader):
         with torch.no_grad():
             y, m, rms = batch
-            y, m = resample_batch(y, m, config["fs"])
+            y, m = resample_batch(y, m, 48000, config["fs"])
             y, m, rms = y.to(device), m.to(device), rms.to(device)
 
             noisy_all.append(m[0, :].cpu().numpy())
@@ -278,22 +278,28 @@ def validate(
 
     lengths_all = np.array([y.shape[0] for y in y_all])
     pesq_all = compute_pesq(y_all, denoised_all, config["fs"])
+    sisdr_all = compute_sisdr(y_all, denoised_all)
     ovr_all, sig_all, bak_all = compute_dnsmos(denoised_all, config["fs"])
+    distillmos_all = compute_distillmos(denoised_all, config["fs"], device=device)
+    xlsr_mos_all = compute_xlsr_sqa_mos(denoised_all, config["fs"], device=device)
     mean_loss = np.mean(lengths_all * np.array(loss_all)) / np.mean(lengths_all)
     mean_pesq = np.mean(lengths_all * np.array(pesq_all)) / np.mean(lengths_all)
     mean_ovr = np.mean(lengths_all * np.array(ovr_all)) / np.mean(lengths_all)
     mean_sig = np.mean(lengths_all * np.array(sig_all)) / np.mean(lengths_all)
     mean_bak = np.mean(lengths_all * np.array(bak_all)) / np.mean(lengths_all)
-    wacc = compute_mean_wacc(denoised_all, txt_val, config["fs"], device=device)
-    metric = (wacc + (mean_ovr - 1) / 4) * 0.5
+    mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
+    mean_xlsr_mos = np.mean(lengths_all * np.array(xlsr_mos_all)) / np.mean(lengths_all)
+    mean_sisdr = np.mean(lengths_all * np.array(sisdr_all)) / np.mean(lengths_all)
 
     sw.add_scalar("Loss", mean_loss, step)
     sw.add_scalar("PESQ", mean_pesq, step)
+    sw.add_scalar("SI-SDR", mean_sisdr, step)
     sw.add_scalar("DNSMOS-OVR", mean_ovr, step)
     sw.add_scalar("DNSMOS-SIG", mean_sig, step)
     sw.add_scalar("DNSMOS-BAK", mean_bak, step)
-    sw.add_scalar("Wacc", wacc, step)
-    sw.add_scalar("Metric", metric, step)
+    sw.add_scalar("DistillMOS", mean_distillmos, step)
+    sw.add_scalar("XLS-R-MOS", mean_xlsr_mos, step)
+
     for i in val_tensorboard_examples:
         sw.add_audio(
             "%d" % i,
@@ -303,12 +309,12 @@ def validate(
         )
 
     np.random.seed()
-    return metric
+    return mean_distillmos
 
 
-def resample_batch(y, m, fs):
-    y = torch.from_numpy(scipy.signal.resample_poly(y.cpu().numpy(), fs, 48000, axis=1))
-    m = torch.from_numpy(scipy.signal.resample_poly(m.cpu().numpy(), fs, 48000, axis=1))
+def resample_batch(y, m, fs_in, fs_out):
+    y = torch.from_numpy(scipy.signal.resample_poly(y.cpu().numpy(), fs_out, fs_in, axis=1))
+    m = torch.from_numpy(scipy.signal.resample_poly(m.cpu().numpy(), fs_out, fs_in, axis=1))
     return y, m
 
 
@@ -331,7 +337,7 @@ def test_model(
     for batch in tqdm.tqdm(test_dataloader):
         with torch.no_grad():
             s, m, rms = batch
-            s, m = resample_batch(s, m, config["fs"])
+            s, m = resample_batch(s, m, 48000, config["fs"])
             s, m, rms = s.to(device), m.to(device), rms.to(device)
 
             y = denoise_net(m)
@@ -344,29 +350,34 @@ def test_model(
             lengths_all.append(s.shape[1])
 
     lengths_all = np.array(lengths_all)
+    distillmos_all = compute_distillmos(denoised_all, config["fs"], device=device)
+    xlsrmos_all = compute_xlsr_sqa_mos(denoised_all, config["fs"], device=device)
     pesq_all = compute_pesq(s_all, denoised_all, config["fs"])
+    sisdr_all = compute_sisdr(s_all, denoised_all)
     ovr_all, sig_all, bak_all = compute_dnsmos(denoised_all, config["fs"])
-    wacc = compute_mean_wacc(denoised_all, txt_test, config["fs"], device=device)
-
+   
     mean_pesq = np.mean(lengths_all * np.array(pesq_all)) / np.mean(lengths_all)
+    mean_sisdr = np.mean(lengths_all * np.array(sisdr_all)) / np.mean(lengths_all)
     mean_ovr = np.mean(lengths_all * np.array(ovr_all)) / np.mean(lengths_all)
     mean_sig = np.mean(lengths_all * np.array(sig_all)) / np.mean(lengths_all)
     mean_bak = np.mean(lengths_all * np.array(bak_all)) / np.mean(lengths_all)
+    mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
+    mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
 
     with open(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"), "w") as f:
         f.write(
-            "PESQ, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, Wacc\n"
-            + "%.3f, %.3f, %.3f, %.3f, %3f"
-            % (mean_pesq, mean_ovr, mean_sig, mean_bak, wacc)
+            "PESQ, SI-SDR, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS\n"
+            + "%.3f, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f"
+            % (mean_pesq, mean_sisdr, mean_ovr, mean_sig, mean_bak, mean_distillmos, mean_xlsr_sqa_mos)
         )
 
-    metrics = np.stack((pesq_all, ovr_all, sig_all, bak_all)).T
-    header = "Index, PESQ, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK"
+    metrics = np.stack((pesq_all, sisdr_all, ovr_all, sig_all, bak_all, distillmos_all, xlsrmos_all)).T
+    header = "Index, PESQ, SI-SDR, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.arange(0, metrics.shape[0]), metrics))
     np.savetxt(
         os.path.join(log_dir, "synthetic_test", "metrics.csv"),
         data,
-        fmt="%d, %.3f, %.3f, %.3f, %.3f",
+        fmt="%d, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f, %.3f",
         delimiter=",",
         header=header,
     )
@@ -374,8 +385,8 @@ def test_model(
     dns4_test_root = os.path.join(pathconfig["DNS4_root"], "dev_testset")
     dns5_test_root = pathconfig["DNS5_blind_testset_root"]
     blind_test_files = glob.glob(
-        os.path.join(dns4_test_root, "**/*.wav"), recursive=True
-    )
+        os.path.join(dns5_test_root, "**/*.wav"), recursive=True
+    ) + glob.glob(os.path.join(dns4_test_root, "**/*.wav"), recursive=True)
 
     y_all, lengths_all = [], []
     for file in tqdm.tqdm(blind_test_files):
@@ -395,7 +406,7 @@ def test_model(
             lengths_all.append(y.shape[1])
 
     lengths_all = np.array(lengths_all)
-    ovr_all, sig_all, bak_all = compute_dnsmos(y_all, fs)
+    ovr_all, sig_all, bak_all = compute_dnsmos(y_all, config['fs'])
 
     mean_ovr = np.mean(lengths_all * np.array(ovr_all)) / np.mean(lengths_all)
     mean_sig = np.mean(lengths_all * np.array(sig_all)) / np.mean(lengths_all)
@@ -403,19 +414,25 @@ def test_model(
 
     os.makedirs(os.path.join(log_dir, "blind_test"), exist_ok=True)
 
+    distillmos_all = compute_distillmos(y_all, config['fs'], device=device)
+    xlsrmos_all = compute_xlsr_sqa_mos(y_all, config['fs'], device=device)
+
+    mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
+    mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
+
     with open(os.path.join(log_dir, "blind_test", "mean_metrics.txt"), "w") as f:
         f.write(
-            "DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK\n"
-            + "%.3f, %.3f, %.3f" % (mean_ovr, mean_sig, mean_bak)
+            "DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS\n"
+            + "%.3f, %.3f, %.3f, %.3f, %.3f" % (mean_ovr, mean_sig, mean_bak, mean_distillmos, mean_xlsr_sqa_mos)
         )
 
-    metrics = np.stack((ovr_all, sig_all, bak_all)).T
-    header = "filepath, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK"
+    metrics = np.stack((ovr_all, sig_all, bak_all, distillmos_all, xlsrmos_all)).T
+    header = "filepath, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.array(blind_test_files, dtype=object), metrics))
     np.savetxt(
         os.path.join(log_dir, "blind_test", "metrics.csv"),
         data,
-        fmt="%s, %.3f, %.3f, %.3f",
+        fmt="%s, %.3f, %.3f, %.3f, %.3f, %.3f",
         delimiter=",",
         header=header,
     )
