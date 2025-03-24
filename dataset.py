@@ -72,11 +72,8 @@ def load_paths(dns4_root_datasets_fullband, vctk_txt_root):
     np.random.seed(1)
     test_filelist = []
     for p in VCTK_TEST_PATHS:
-        test_filelist += np.random.choice(
-            sorted(glob.glob(os.path.join(p, "*.wav"), recursive=True)),
-            60,
-            replace=False,
-        ).tolist()
+        test_filelist +=  sorted(glob.glob(os.path.join(p, "*.wav")))
+
     np.random.seed()
 
     test_texts = []
@@ -111,9 +108,9 @@ def load_paths(dns4_root_datasets_fullband, vctk_txt_root):
         noise_filepath_list, len(noise_filepath_list), replace=False
     )
     np.random.seed()
-    noise_filepath_list_train = noise_filepath_list[:-300]
-    noise_filepath_list_val = noise_filepath_list[-300:-150]
-    noise_filepath_list_test = noise_filepath_list[-150:]
+    noise_filepath_list_train = noise_filepath_list[:-4400]
+    noise_filepath_list_val = noise_filepath_list[-4400:-4000]
+    noise_filepath_list_test = noise_filepath_list[-4000:]
 
     pathlist_rir1 = glob.glob(
         os.path.join(

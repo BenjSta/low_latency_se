@@ -1,4 +1,4 @@
-resume = false
+resume = true
 
 batch_size=64
 fs = 16000
@@ -7,6 +7,7 @@ lr_start = 0.0003
 lr_stop = 0.00001
 lr_update_interval = 1000
 validate_only = false
+test_only = false
 val_interval = 20000
 max_steps = 500000
 num_workers = 14
@@ -16,9 +17,12 @@ data_distribution_seed = 1
 hopsize = 40
 winlen = 320
 method = "complex_filter"
+use_mlp = true
 num_filter_frames = 1
 learnable_transforms = true
 downsample_factor = 2
+algorithmic_delay_nn=40
+algorithmic_delay_filtering=40
 
 [model.crn_config]
 num_channels_encoder = [2, 16, 32, 48, 64]

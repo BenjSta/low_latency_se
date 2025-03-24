@@ -266,6 +266,7 @@ class CRN(nn.Module):
         # Reshape and pass through GRU
         batch_size, n_channels, n_frames, n_bins = x.shape
         x = x.permute(0, 2, 1, 3).reshape(batch_size, n_frames, n_channels * n_bins)
+        x = x.contiguous()
         x_hidden, _ = self.group_gru(x)
         x = x_hidden.reshape(batch_size, n_frames, n_channels, n_bins).permute(
             0, 2, 1, 3
@@ -309,6 +310,7 @@ class SpeechEnhancementModel(nn.Module):
         hopsize,
         winlen,
         method,
+        use_mlp,
         num_filter_frames,
         learnable_transforms,
         downsample_factor=1,
@@ -321,7 +323,11 @@ class SpeechEnhancementModel(nn.Module):
         super().__init__()
 
         self.num_filter_frames = num_filter_frames
+
         self.downsample_factor = downsample_factor
+        if method=="time_domain_filtering":
+            assert self.downsample_factor==1, "Time domain filtering only supports downsample_factor=1" 
+            
         self.adaptive_phase_shift = adaptive_phase_shift
         self.real_valued = False
 
@@ -329,31 +335,12 @@ class SpeechEnhancementModel(nn.Module):
         crn_config["num_output_channels"] = self.num_filter_frames * (
             1 if self.real_valued else 3
         )
-        crn_config["output_nonlinearity"] = "Sigmoid" if method == "complex_filter" else "ELU"
+        crn_config["output_nonlinearity"] = "Sigmoid" if method == "complex_filter" and not(use_mlp) else "ELU"
 
         # Initialize CRN model
         self.crn = CRN(**crn_config)
 
-        if method == "time_domain_filtering" and self.adaptive_phase_shift:
-            # Initialize linear phase regressor for adaptive phase shift
-            self.linphase_regressor = nn.Sequential(
-                nn.Linear(self.crn.recurr_input_size, linphase_regressor_hidden_size),
-                nn.ELU(),
-                nn.Linear(
-                    linphase_regressor_hidden_size, linphase_regressor_hidden_size
-                ),
-                nn.ELU(),
-                nn.Linear(linphase_regressor_hidden_size, self.num_filter_frames),
-                nn.Sigmoid(),
-            )
 
-
-            self.fvec = nn.Parameter(
-                torch.from_numpy(
-                    np.linspace(0, np.pi, winlen // 2 + 1, endpoint=True)
-                ).float(),
-                requires_grad=learnable_transforms,
-            )
 
         self.winlen = winlen
         self.hopsize = hopsize
@@ -414,6 +401,13 @@ class SpeechEnhancementModel(nn.Module):
                 )[:, None, :],
                 requires_grad=learnable_transforms,
             )
+            
+            if use_mlp:
+                mlp_out = 3 * (winlen // 2 + 1)
+                self.mlp = nn.Sequential(
+                    nn.Linear(3 * (winlen // 2 + 1), mlp_out),
+                    nn.Sigmoid()
+                )
 
             self.algorithmic_delay_nn = 2 * hopsize
             self.algorithmic_delay_filtering = None
@@ -465,8 +459,6 @@ class SpeechEnhancementModel(nn.Module):
 
             self.inverse_transform = nn.Sequential(
                 nn.Linear(3 * (winlen // 2 + 1), winlen),
-                nn.ELU(),
-                nn.Linear(winlen, winlen),
                 nn.ELU(),
                 nn.Linear(winlen, filtlen),
                 nn.Tanh()
@@ -520,14 +512,22 @@ class SpeechEnhancementModel(nn.Module):
         x = x[:, :, :: self.downsample_factor, :]
         x, bottleneck_out = self.crn(x)
         # upsample again by repeating
-        x = torch.repeat_interleave(x, self.downsample_factor, dim=2)[:, :, :nfr, :]
 
         if self.real_valued:
             x = x.view(x.size(0), 1, self.num_filter_frames, x.size(-2), x.size(-1))
             x = nn.functional.pad(x, (0,0,0,0,0,0,0,1), value=0) #pad to add a zero imaginary part
         else:
             x = x.view(x.size(0), 3, self.num_filter_frames, x.size(-2), x.size(-1))
+        
+        if hasattr(self, "mlp"):
+            x = x.permute(0,2,3,4,1)
+            x = x.reshape(*x.shape[:3], -1)
+            x = self.mlp(x)
+            x = x.reshape(*x.shape[:3], x.shape[3] // 3, 3)
+            x = x.permute(0,4,1,2,3)
             
+        x = torch.repeat_interleave(x, self.downsample_factor, dim=3)[..., :nfr, :]
+
 
         if self.method == "complex_filter":
             x = torch.einsum("bijkm,li->bljkm", x, self.v)

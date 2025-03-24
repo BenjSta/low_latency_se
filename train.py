@@ -158,6 +158,12 @@ def main():
             txt_val,
         )
         exit()
+        
+    if config["test_only"]:
+        test_model(
+        denoise_net, test_dataloader, config, device, log_dir, pathconfig, txt_test
+                )
+        exit()
 
     denoise_net.train()
     train_loss_sum = 0
@@ -324,10 +330,10 @@ def test_model(
     chkpt_dir = os.path.join(
         pathconfig["chkpt_logs_path"], "checkpoints", config["train_name"]
     )
-    chkpt = torch.load(os.path.join(chkpt_dir, "best"))
+    chkpt = torch.load(os.path.join(chkpt_dir, "best"), weights_only=False)
     denoise_net.load_state_dict(chkpt["denoiser"])
     denoise_net.eval()
-
+    
     np.random.seed(config["data_distribution_seed"])
     print("starting to test")
 
@@ -355,7 +361,7 @@ def test_model(
     pesq_all = compute_pesq(s_all, denoised_all, config["fs"])
     sisdr_all = compute_sisdr(s_all, denoised_all)
     ovr_all, sig_all, bak_all = compute_dnsmos(denoised_all, config["fs"])
-   
+
     mean_pesq = np.mean(lengths_all * np.array(pesq_all)) / np.mean(lengths_all)
     mean_sisdr = np.mean(lengths_all * np.array(sisdr_all)) / np.mean(lengths_all)
     mean_ovr = np.mean(lengths_all * np.array(ovr_all)) / np.mean(lengths_all)
@@ -383,10 +389,7 @@ def test_model(
     )
 
     dns4_test_root = os.path.join(pathconfig["DNS4_root"], "dev_testset")
-    dns5_test_root = pathconfig["DNS5_blind_testset_root"]
-    blind_test_files = glob.glob(
-        os.path.join(dns5_test_root, "**/*.wav"), recursive=True
-    ) + glob.glob(os.path.join(dns4_test_root, "**/*.wav"), recursive=True)
+    blind_test_files = glob.glob(os.path.join(dns4_test_root, "**/*.wav"), recursive=True)
 
     y_all, lengths_all = [], []
     for file in tqdm.tqdm(blind_test_files):
