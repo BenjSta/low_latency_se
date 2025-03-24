@@ -1,0 +1,17 @@
+toml
+numpy
+torch
+scipy
+tqdm
+ptflops
+soundfile
+werpy
+whisper
+pymcd
+distillmos
+xls-r-sqa
+pesq
+webrtcvad
+librosa
+pandas
+onnxruntime
