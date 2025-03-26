@@ -310,25 +310,39 @@ class SpeechEnhancementModel(nn.Module):
         hopsize,
         winlen,
         method,
-        use_mlp,
-        num_filter_frames,
-        learnable_transforms,
+        use_mlp=False,
+        num_filter_frames=1,
+        learnable_transforms=True,
         downsample_factor=1,
         algorithmic_delay_nn=0,
         algorithmic_delay_filtering=0,
-        adaptive_phase_shift=False,
-        linphase_regressor_hidden_size=64,
         filtlen = None
     ):
+        """
+        Initialize the Speech Enhancement Model.
+
+        Args:
+            crn_config (dict): Configuration for the CRN model
+            hopsize (int): Hop size of the STFT
+            winlen (int): Window length of the STFT
+            method (str): Method for speech enhancement. One of "complex_filter" or "time_domain_filtering"
+            use_mlp (bool): Whether to use an MLP after the CRN (only applies for complex_filter), defaults to False
+            num_filter_frames (int): Number of frames to filter in the past and future, defaults to 1
+            learnable_transforms (bool): Whether to make the STFT transforms learnable, defaults to True
+            downsample_factor (int): Factor to downsample / upsample before/after the neural network, only applies for complex_filter, defaults to 1
+            algorithmic_delay_nn (int): Algorithmic delay for the neural network, only applies for time_domain_filter, defaults to 0
+            algorithmic_delay_filtering (int): Algorithmic delay for time domain filtering, only applies for time_domain_filter, defaults to 0
+            filtlen (int): Length of the filter to be learned, only applies for time_domain_filter, defaults to None, which is equal to winlen
+        """
         super().__init__()
 
         self.num_filter_frames = num_filter_frames
 
-        self.downsample_factor = downsample_factor
         if method=="time_domain_filtering":
-            assert self.downsample_factor==1, "Time domain filtering only supports downsample_factor=1" 
+            self.downsample_factor = 1
+        else:
+            self.downsample_factor = downsample_factor
             
-        self.adaptive_phase_shift = adaptive_phase_shift
         self.real_valued = False
 
         crn_config["fsize_input"] = winlen // 2 + 1
