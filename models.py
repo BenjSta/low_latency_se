@@ -5,71 +5,6 @@ from ptflops import get_model_complexity_info
 from third_party.grouped_gru import GroupedGRU
 
 
-
-class SnakeBeta(nn.Module):
-    """
-    A modified Snake function which uses separate parameters for the magnitude of the periodic components
-    Shape:
-        - Input: (B, C, T)
-        - Output: (B, C, T), same shape as the input
-    Parameters:
-        - alpha - trainable parameter that controls frequency
-        - beta - trainable parameter that controls magnitude
-    References:
-        - This activation function is a modified version based on this paper by Liu Ziyin, Tilman Hartwig, Masahito Ueda:
-        https://arxiv.org/abs/2006.08195
-    Examples:
-        >>> a1 = snakebeta(256)
-        >>> x = torch.randn(256)
-        >>> x = a1(x)
-    """
-
-    def __init__(
-        self, in_features, alpha=1.0, alpha_trainable=True, alpha_logscale=False
-    ):
-        """
-        Initialization.
-        INPUT:
-            - in_features: shape of the input
-            - alpha - trainable parameter that controls frequency
-            - beta - trainable parameter that controls magnitude
-            alpha is initialized to 1 by default, higher values = higher-frequency.
-            beta is initialized to 1 by default, higher values = higher-magnitude.
-            alpha will be trained along with the rest of your model.
-        """
-        super(SnakeBeta, self).__init__()
-        self.in_features = in_features
-
-        # Initialize alpha
-        self.alpha_logscale = alpha_logscale
-        if self.alpha_logscale:  # Log scale alphas initialized to zeros
-            self.alpha = nn.Parameter(torch.zeros(in_features) * alpha)
-            self.beta = nn.Parameter(torch.zeros(in_features) * alpha)
-        else:  # Linear scale alphas initialized to ones
-            self.alpha = nn.Parameter(torch.ones(in_features) * alpha)
-            self.beta = nn.Parameter(torch.ones(in_features) * alpha)
-
-        self.alpha.requires_grad = alpha_trainable
-        self.beta.requires_grad = alpha_trainable
-
-        self.no_div_by_zero = 0.000000001
-
-    def forward(self, x):
-        """
-        Forward pass of the function.
-        Applies the function to the input elementwise.
-        SnakeBeta ∶= x + 1/b * sin^2 (xa)
-        """
-        alpha = self.alpha.unsqueeze(0).unsqueeze(-1)  # Line up with x to [B, C, T]
-        beta = self.beta.unsqueeze(0).unsqueeze(-1)
-        if self.alpha_logscale:
-            alpha = torch.exp(alpha)
-            beta = torch.exp(beta)
-        x = x + (1.0 / (beta + self.no_div_by_zero)) * pow(torch.sin(x * alpha), 2)
-
-        return x
-
-
 class CausalConvBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size, fstride, bias=True):
         super().__init__()
@@ -325,9 +260,9 @@ class SpeechEnhancementModel(nn.Module):
             crn_config (dict): Configuration for the CRN model
             hopsize (int): Hop size of the STFT
             winlen (int): Window length of the STFT
-            method (str): Method for speech enhancement. One of "complex_filter" or "time_domain_filtering"
+            method (str): Method for speech enhancement. One of "complex_filter", "time_domain_filtering", or "complex_mapping"
             use_mlp (bool): Whether to use an MLP after the CRN (only applies for complex_filter), defaults to False
-            num_filter_frames (int): Number of frames to filter in the past and future, defaults to 1
+            num_filter_frames (int): Number of frames to filter (multiframe filtering), does not apply for complex mapping, defaults to 1
             learnable_transforms (bool): Whether to make the STFT transforms learnable, defaults to True
             downsample_factor (int): Factor to downsample / upsample before/after the neural network, only applies for complex_filter, defaults to 1
             algorithmic_delay_nn (int): Algorithmic delay for the neural network, only applies for time_domain_filter, defaults to 0
@@ -336,20 +271,23 @@ class SpeechEnhancementModel(nn.Module):
         """
         super().__init__()
 
-        self.num_filter_frames = num_filter_frames
+        if method=="complex_mapping":
+            self.num_filter_frames = 1
+        else:
+            self.num_filter_frames = num_filter_frames
 
         if method=="time_domain_filtering":
             self.downsample_factor = 1
         else:
             self.downsample_factor = downsample_factor
             
-        self.real_valued = False
+        self.real_valued = False # for complex_filtering, whether the mask is real valued or complex
 
         crn_config["fsize_input"] = winlen // 2 + 1
-        crn_config["num_output_channels"] = self.num_filter_frames * (
-            1 if self.real_valued else 3
-        )
-        crn_config["output_nonlinearity"] = "Sigmoid" if method == "complex_filter" and not(use_mlp) else "ELU"
+        crn_config["num_output_channels"] =  self.num_filter_frames * (
+                1 if self.real_valued else 3)
+        
+        crn_config["output_nonlinearity"] = "ELU" if (self.method == "time_domain_filtering" or self.use_mlp) else ("Sigmoid" if self.method == "complex_filter" else "Softplus")
 
         # Initialize CRN model
         self.crn = CRN(**crn_config)
@@ -362,7 +300,7 @@ class SpeechEnhancementModel(nn.Module):
             filtlen = winlen
         self.filtlen = filtlen
 
-        if method == "complex_filter":
+        if method == "complex_filter" or method == "complex_mapping":
             # Create asymmetric Hann windows for complex filtering
             analysis_window, synthesis_window = asymmetric_hann_window_pair(
                 winlen, hopsize * 2
@@ -401,7 +339,7 @@ class SpeechEnhancementModel(nn.Module):
         istft_matrix_real = torch.from_numpy(np.fft.irfft(np.eye(winlen // 2 + 1)))
         istft_matrix_imag = torch.from_numpy(np.fft.irfft(1j * np.eye(winlen // 2 + 1)))
 
-        if method == "complex_filter":
+        if method == "complex_filter" or method == "complex_mapping":
             istft_matrix_real = (
                 istft_matrix_real[:, -2 * hopsize :] * synthesis_window[None, :]
             )
@@ -429,47 +367,6 @@ class SpeechEnhancementModel(nn.Module):
             assert (
                 algorithmic_delay_filtering <= winlen // 2
             ), "Algorithmic delay must be less or equal to winlen // 2"
-
-            # fade_in_len = min(winlen // 4, algorithmic_delay_filtering)
-            # fade_in = torch.hann_window(2 * fade_in_len)[:fade_in_len]
-
-            # # use a symmetric fade_in / fade_out if algorithmic_delay is winlen // 2
-            # # otherwise use a fade_out longer than_fade_in, but at maximum fade_out_len = winlen // 3
-            # # use a zero taper of at maximum winlen // 6
-
-            # fade_out_len = max(
-            #     int((1 - algorithmic_delay_filtering / (winlen / 2)) * winlen / 2),
-            #     fade_in_len,
-            # )
-            # zeros_len = 0
-            # # zeros_len = int((1 - algorithmic_delay_filtering / (winlen / 2)) * winlen / 6)
-
-            # end_tapering = torch.cat(
-            #     [
-            #         torch.hann_window(2 * fade_out_len)[fade_out_len:],
-            #         torch.zeros(zeros_len),
-            #     ]
-            # )
-
-            # window = torch.cat(
-            #     [
-            #         fade_in,
-            #         torch.ones(winlen - fade_in_len - len(end_tapering)),
-            #         end_tapering,
-            #     ]
-            # )
-            # self.inverse_transform = nn.Parameter(
-            #     torch.roll(
-            #         torch.cat(
-            #             [istft_matrix_real.float(), istft_matrix_imag.float()],
-            #             dim=0,
-            #         ),
-            #         algorithmic_delay_filtering,
-            #         dims=-1,
-            #     )
-            #     * window[None, :],
-            #     requires_grad=learnable_transforms,
-            # )
 
             self.inverse_transform = nn.Sequential(
                 nn.Linear(3 * (winlen // 2 + 1), winlen),
@@ -524,8 +421,8 @@ class SpeechEnhancementModel(nn.Module):
         # downsample
         nfr = x.size(2)
         x = x[:, :, :: self.downsample_factor, :]
-        x, bottleneck_out = self.crn(x)
-        # upsample again by repeating
+        x, _ = self.crn(x)
+        
 
         if self.real_valued:
             x = x.view(x.size(0), 1, self.num_filter_frames, x.size(-2), x.size(-1))
@@ -539,15 +436,22 @@ class SpeechEnhancementModel(nn.Module):
             x = self.mlp(x)
             x = x.reshape(*x.shape[:3], x.shape[3] // 3, 3)
             x = x.permute(0,4,1,2,3)
-            
-        x = torch.repeat_interleave(x, self.downsample_factor, dim=3)[..., :nfr, :]
 
+        # upsample again by repeating   
+        x = torch.repeat_interleave(x, self.downsample_factor, dim=3)[..., :nfr, :]
 
         if self.method == "complex_filter":
             x = torch.einsum("bijkm,li->bljkm", x, self.v)
             return self._complex_filtering(x, x_complex, xlen)
+        
+        elif self.method == "complex_mapping":
+            x = torch.einsum("bijkm,li->bljkm", x, self.v)
+            # remove number of filter frames dimension
+            x = x.squeeze(2)
+            return self._linear_inverse_transform(x, xlen)
+        
         elif self.method == "time_domain_filtering":
-            return self._time_domain_filtering(x, x_in, bottleneck_out, xlen)
+            return self._time_domain_filtering(x, x_in, xlen)
 
     def _complex_filtering(self, fd_filt, x_complex, xlen):
         fd_filt_complex = torch.complex(fd_filt[:, 0, ...], fd_filt[:, 1, ...])
@@ -555,9 +459,13 @@ class SpeechEnhancementModel(nn.Module):
         x_complex = x_complex.unfold(1, self.num_filter_frames, 1).permute(0, 3, 1, 2)
         y = torch.einsum("bijk,bijk->bjk", x_complex, fd_filt_complex)
         y = torch.cat([y.real, y.imag], dim=-1).permute(0, 2, 1)
+        
+        return self._linear_inverse_transform(y, xlen)
+    
+    def _linear_inverse_transform(self, x_complex, xlen):
         y = nn.functional.pad(
             nn.functional.conv_transpose1d(
-                y, self.inverse_transform, stride=self.hopsize
+                x_complex, self.inverse_transform, stride=self.hopsize
             ),
             (self.winlen - 2 * self.hopsize, 0),
         ).squeeze(1)
@@ -568,18 +476,9 @@ class SpeechEnhancementModel(nn.Module):
             y = torch.nn.functional.pad(y, (0, -lendiff))
         return y
 
-    def _time_domain_filtering(self, fd_filt, x_in, bottleneck_out, xlen):
+
+    def _time_domain_filtering(self, fd_filt, x_in, xlen):
         fd_filt = fd_filt.permute(0, 2, 3, 1, 4)
-        # if self.adaptive_phase_shift:
-        #     phase_shift = (
-        #         self.linphase_regressor(bottleneck_out).permute(0, 2, 1)[:, :, :, None]
-        #         * (self.winlen / 2)
-        #         * self.fvec[None, None, None, :]
-        #     )  # allow a maximum shift of winlen / 2
-        #     phasor = torch.exp(-1j * phase_shift)
-        #     fd_filt_complex = fd_filt[:, :, :, 0, :] + 1j * fd_filt[:, :, :, 1, :]
-        #     fd_filt_complex = fd_filt_complex * phasor
-        #     fd_filt = torch.stack([fd_filt_complex.real, fd_filt_complex.imag], dim=3)
 
         fd_filt = fd_filt.reshape(fd_filt.size(0), fd_filt.size(1), fd_filt.size(2), -1)
         filt = self.inverse_transform(fd_filt)
