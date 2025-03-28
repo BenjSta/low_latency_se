@@ -30,7 +30,30 @@ def main():
         default="-1",
         help="CUDA visible devices.",
     )
+    parser.add_argument(
+        "--resume",
+        "-r",
+        action="store_true",
+        help="Resume training from the latest checkpoint.",
+    )
+    parser.add_argument(
+        "--validate_no_training",
+        "-ov",
+        action="store_true",
+        help="Validate the model only.",
+    )
+    parser.add_argument(
+        "--test_no_training",
+        "-ot",
+        action="store_true",
+        help="Test the model only.",
+    )
+
     args = parser.parse_args()
+
+    resume = args.resume
+    validate_only = args.validate_no_training
+    test_only = args.test_no_training
 
     config = toml.load(args.config)
     config['train_name'] = os.path.basename(args.config).split('.')[0]
@@ -129,7 +152,7 @@ def main():
     )
     os.makedirs(chkpt_dir, exist_ok=True)
 
-    if config["resume"]:
+    if resume:
         try:
             chkpt = torch.load(os.path.join(chkpt_dir, "latest"), weights_only=False)
             optim.load_state_dict(chkpt["optim"])
@@ -146,7 +169,7 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     sw = SummaryWriter(log_dir)
 
-    if config["validate_only"]:
+    if validate_only:
         validate(
             denoise_net,
             val_dataloader,
@@ -159,7 +182,7 @@ def main():
         )
         exit()
         
-    if config["test_only"]:
+    if test_only:
         test_model(
         denoise_net, test_dataloader, config, device, log_dir, pathconfig, txt_test
                 )
