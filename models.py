@@ -245,11 +245,11 @@ class SpeechEnhancementModel(nn.Module):
         hopsize,
         winlen,
         method,
+        algorithmic_delay_nn,
         use_mlp=False,
         num_filter_frames=1,
         learnable_transforms=True,
         downsample_factor=1,
-        algorithmic_delay_nn=0,
         algorithmic_delay_filtering=0,
         filtlen = None
     ):
@@ -261,11 +261,11 @@ class SpeechEnhancementModel(nn.Module):
             hopsize (int): Hop size of the STFT
             winlen (int): Window length of the STFT
             method (str): Method for speech enhancement. One of "complex_filter", "time_domain_filtering", or "complex_mapping"
-            use_mlp (bool): Whether to use an MLP after the CRN (only applies for complex_filter), defaults to False
+            algorithmic_delay_nn (int): Algorithmic delay for the neural network, defaults to 0
+            use_mlp (bool): Whether to use an MLP after the CRN (only applies for complex_filter and complex_mapping), defaults to False
             num_filter_frames (int): Number of frames to filter (multiframe filtering), does not apply for complex mapping, defaults to 1
             learnable_transforms (bool): Whether to make the STFT transforms learnable, defaults to True
             downsample_factor (int): Factor to downsample / upsample before/after the neural network, only applies for complex_filter, defaults to 1
-            algorithmic_delay_nn (int): Algorithmic delay for the neural network, only applies for time_domain_filter, defaults to 0
             algorithmic_delay_filtering (int): Algorithmic delay for time domain filtering, only applies for time_domain_filter, defaults to 0
             filtlen (int): Length of the filter to be learned, only applies for time_domain_filter, defaults to None, which is equal to winlen
         """
@@ -281,17 +281,12 @@ class SpeechEnhancementModel(nn.Module):
         else:
             self.downsample_factor = downsample_factor
             
-        self.real_valued = False # for complex_filtering, whether the mask is real valued or complex
-
         crn_config["fsize_input"] = winlen // 2 + 1
-        crn_config["num_output_channels"] =  self.num_filter_frames * (
-                1 if self.real_valued else 3)
-        
-        crn_config["output_nonlinearity"] = "ELU" if (self.method == "time_domain_filtering" or self.use_mlp) else ("Sigmoid" if self.method == "complex_filter" else "Softplus")
+        crn_config["num_output_channels"] =  self.num_filter_frames * 3
+        crn_config["output_nonlinearity"] = "ELU" if (method == "time_domain_filtering" or use_mlp) else ("Sigmoid" if method == "complex_filter" else "Softplus")
 
         # Initialize CRN model
         self.crn = CRN(**crn_config)
-
 
 
         self.winlen = winlen
@@ -299,6 +294,15 @@ class SpeechEnhancementModel(nn.Module):
         if filtlen is None:
             filtlen = winlen
         self.filtlen = filtlen
+        self.method = method
+
+        if method == "time_domain_filtering":
+            self.pad_size_nn = (winlen - algorithmic_delay_nn)
+        else:
+            self.pad_size_nn = (2*hopsize - algorithmic_delay_nn)
+        assert (
+                self.pad_size_nn >= 0
+            ), "Algorithmic delay too large"
 
         if method == "complex_filter" or method == "complex_mapping":
             # Create asymmetric Hann windows for complex filtering
@@ -308,7 +312,7 @@ class SpeechEnhancementModel(nn.Module):
         elif method == "time_domain_filtering":
             # use an asymmetric analysis window
             analysis_window, _ = asymmetric_hann_window_pair(
-                winlen, algorithmic_delay_nn * 2
+                winlen, np.max(algorithmic_delay_nn * 2, 0)
             )
 
             # use an asymmetric crossfade / synthesis window
@@ -361,7 +365,6 @@ class SpeechEnhancementModel(nn.Module):
                     nn.Sigmoid()
                 )
 
-            self.algorithmic_delay_nn = 2 * hopsize
             self.algorithmic_delay_filtering = None
         elif method == "time_domain_filtering":
             assert (
@@ -375,24 +378,18 @@ class SpeechEnhancementModel(nn.Module):
                 nn.Tanh()
             )
 
-            self.algorithmic_delay_nn = algorithmic_delay_nn
-            self.pad_size_nn = winlen - self.algorithmic_delay_nn
             self.algorithmic_delay_filtering = algorithmic_delay_filtering
-            assert (
-                self.pad_size_nn >= 0
-            ), "Algorithmic delay must be less than or equal to winlen"
+            
 
-        self.method = method
         self.std_norm = nn.Parameter(
             torch.ones(winlen // 2 + 1), requires_grad=learnable_transforms
         )
-        if not self.real_valued:
-            self.v = nn.Parameter(
-                torch.tensor(
-                    [[1, -1 / 2, -1 / 2], [0, np.sqrt(3) / 2, -np.sqrt(3) / 2]],
-                    dtype=torch.float32,
-                )
+        self.v = nn.Parameter(
+            torch.tensor(
+                [[1, -1 / 2, -1 / 2], [0, np.sqrt(3) / 2, -np.sqrt(3) / 2]],
+                dtype=torch.float32,
             )
+        )
 
     def set_std_norm(self, std_norm):
         self.std_norm.data = std_norm.to(self.std_norm.device)
@@ -400,18 +397,28 @@ class SpeechEnhancementModel(nn.Module):
     def forward(self, x_in, return_features=False):
         xlen = x_in.size(-1)
 
-        if self.method == "time_domain_filtering":
+        
+        # filter input path only needed for complex_filter
+        if self.method == "complex_filter":
+            x = x_in.unsqueeze(1)
+            x = nn.functional.conv1d(x, self.forward_transform, stride=self.hopsize)
+            x = x.view(x.size(0), 2, -1, x.size(-1)).transpose(2, 3)
+
+            x_complex = torch.complex(x[:, 0, ...], x[:, 1, ...])
+
+
+        # neural network input path
+        if self.pad_size_nn != 0 or self.method != "complex_filter":
             x = torch.nn.functional.pad(x_in, (self.pad_size_nn, 0))
+            x = x.unsqueeze(1)
+            x = nn.functional.conv1d(x, self.forward_transform, stride=self.hopsize)
+            x = x.view(x.size(0), 2, -1, x.size(-1)).transpose(2, 3)
+            x = torch.complex(x[:, 0, ...], x[:, 1, ...])
         else:
-            x = x_in
-
-        x = x.unsqueeze(1)
-        x = nn.functional.conv1d(x, self.forward_transform, stride=self.hopsize)
-        x = x.view(x.size(0), 2, -1, x.size(-1)).transpose(2, 3)
-
-        x_complex = torch.complex(x[:, 0, ...], x[:, 1, ...])
-        x_mag = torch.clip(torch.abs(x_complex), 1e-12)
-        x = x_mag**0.3 * x_complex / x_mag
+            x = x_complex
+        
+        x_mag = torch.clip(torch.abs(x), 1e-12)
+        x = x_mag**0.3 * x / x_mag
         if return_features:
             return x
 
@@ -422,13 +429,7 @@ class SpeechEnhancementModel(nn.Module):
         nfr = x.size(2)
         x = x[:, :, :: self.downsample_factor, :]
         x, _ = self.crn(x)
-        
-
-        if self.real_valued:
-            x = x.view(x.size(0), 1, self.num_filter_frames, x.size(-2), x.size(-1))
-            x = nn.functional.pad(x, (0,0,0,0,0,0,0,1), value=0) #pad to add a zero imaginary part
-        else:
-            x = x.view(x.size(0), 3, self.num_filter_frames, x.size(-2), x.size(-1))
+        x = x.view(x.size(0), -1, self.num_filter_frames, x.size(-2), x.size(-1))
         
         if hasattr(self, "mlp"):
             x = x.permute(0,2,3,4,1)
@@ -448,6 +449,7 @@ class SpeechEnhancementModel(nn.Module):
             x = torch.einsum("bijkm,li->bljkm", x, self.v)
             # remove number of filter frames dimension
             x = x.squeeze(2)
+            x = torch.cat([x[:, 0, ...], x[:, 1, ...]], dim=-1).permute(0, 2, 1)
             return self._linear_inverse_transform(x, xlen)
         
         elif self.method == "time_domain_filtering":
@@ -462,10 +464,10 @@ class SpeechEnhancementModel(nn.Module):
         
         return self._linear_inverse_transform(y, xlen)
     
-    def _linear_inverse_transform(self, x_complex, xlen):
+    def _linear_inverse_transform(self, x_complex_stacked, xlen):
         y = nn.functional.pad(
             nn.functional.conv_transpose1d(
-                x_complex, self.inverse_transform, stride=self.hopsize
+                x_complex_stacked, self.inverse_transform, stride=self.hopsize
             ),
             (self.winlen - 2 * self.hopsize, 0),
         ).squeeze(1)
