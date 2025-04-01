@@ -1,0 +1,14 @@
+data_distribution_seed = 1
+
+[data_distribution]
+snr_mu_and_sigma=[15, 10]
+speech_rms_mu_and_sigma=[-20, 7]
+apply_noise=true
+rir_percentage=0.75
+
+
+
+
+
+
+
