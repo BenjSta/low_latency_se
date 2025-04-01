@@ -365,17 +365,24 @@ class NoisySpeechDataset(data.Dataset):
         rir_filepath = self.rir_filepath_list[ind]
 
         while True:
-            s, m, rms = generate_noisy_speech_sample(
-                speech_filepath,
-                noise_filepath,
-                rir_filepath,
-                self.duration,
-                self.snr_mu_and_sigma,
-                self.speech_rms_mu_and_sigma,
-                self.apply_noise,
-                self.rir_percentage,
-                self.fs,
-            )
-            break
+            try:
+                s, m, rms = generate_noisy_speech_sample(
+                    speech_filepath,
+                    noise_filepath,
+                    rir_filepath,
+                    self.duration,
+                    self.snr_mu_and_sigma,
+                    self.speech_rms_mu_and_sigma,
+                    self.apply_noise,
+                    self.rir_percentage,
+                    self.fs,
+                )
+                break
+            except Exception as e:
+                print(
+                    "Error generating sample from %s, %s, %s: %s"
+                    % (speech_filepath, noise_filepath, rir_filepath, str(e))
+                )
+                print("Retrying...")
 
         return s, m, rms
