@@ -48,7 +48,7 @@ def compute_distillmos(list_of_signals, fs, device):
                 distillmos_model(
                     torch.from_numpy(
                         scipy.signal.resample_poly(s / np.max(np.abs(s)), 16000, fs)
-                    ).to(device)[None, :]
+                    ).float().to(device)[None, :]
                 ).detach().cpu().numpy().squeeze().item()
               
             )
@@ -74,7 +74,7 @@ def compute_xlsr_sqa_mos(list_of_signals, fs, device):
                 xlsr_sqa_model(
                     torch.from_numpy(
                         scipy.signal.resample_poly(s / np.max(np.abs(s)), 16000, fs)
-                    ).to(device)[None, :]
+                    ).float().to(device)[None, :]
                 ).detach().cpu().numpy().squeeze().item()
             )
 
@@ -114,7 +114,8 @@ def compute_sisdr(list_of_refs, list_of_signals):
         proj_gain = np.dot(r, s) / np.dot(r, r)
         r_proj = proj_gain * r
         distortion = s - r_proj
-        sisdrvals.append(10 * np.log10(np.dot(r_proj, r_proj) / np.dot(distortion, distortion)))
+        sisdrvals.append(np.clip(
+            10 * np.log10(np.dot(r_proj, r_proj) / np.dot(distortion, distortion)), -np.inf, 60)) # clip to avoid inf values for very clear signals
     
     return np.array(sisdrvals)
             
