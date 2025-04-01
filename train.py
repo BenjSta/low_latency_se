@@ -111,6 +111,7 @@ def main():
         num_workers=config["num_workers"],
         drop_last=True,
         worker_init_fn=worker_init_fn,
+        persistent_workers=True,
     )
 
     val_dataloader = DataLoader(
