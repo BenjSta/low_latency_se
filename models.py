@@ -300,9 +300,6 @@ class SpeechEnhancementModel(nn.Module):
             self.pad_size_nn = (winlen - algorithmic_delay_nn)
         else:
             self.pad_size_nn = (2*hopsize - algorithmic_delay_nn)
-        assert (
-                self.pad_size_nn >= 0
-            ), "Algorithmic delay too large"
 
         if method == "complex_filter" or method == "complex_mapping":
             # Create asymmetric Hann windows for complex filtering
@@ -409,7 +406,12 @@ class SpeechEnhancementModel(nn.Module):
 
         # neural network input path
         if self.pad_size_nn != 0 or self.method != "complex_filter":
-            x = torch.nn.functional.pad(x_in, (self.pad_size_nn, 0))
+            if self.pad_size_nn >= 0:
+                x = torch.nn.functional.pad(x_in, (self.pad_size_nn, 0))
+            else:
+                x = x_in[:, -self.pad_size_nn :]
+                x = torch.nn.functional.pad(x, (0, -self.pad_size_nn))
+
             x = x.unsqueeze(1)
             x = nn.functional.conv1d(x, self.forward_transform, stride=self.hopsize)
             x = x.view(x.size(0), 2, -1, x.size(-1)).transpose(2, 3)
