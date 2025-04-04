@@ -1,0 +1,3 @@
+DNS4_root = "/media/DATA/shared/datasets/DNS4/datasets_fullband/datasets_fullband/"
+VCTK_txt_root = "/home/stahl/data_resources/vctk_txt/txt/"
+chkpt_logs_path = "/media/DATA/shared/stahl/low_latency_se/"
