@@ -13,7 +13,7 @@ import torch
 from metrics import compute_dnsmos, compute_pesq, compute_distillmos, compute_xlsr_sqa_mos, compute_sisdr
 from dataset import NoisySpeechDataset, load_paths
 from models import SpeechEnhancementModel
-from losses import complex_compressed_spec_mse
+from losses import complex_compressed_spec_mse, combined_loss
 import glob
 import soundfile
 
@@ -192,6 +192,20 @@ def main():
     denoise_net.train()
     train_loss_sum = 0
     pbar = tqdm.tqdm(np.arange(config['max_steps']), initial=steps)
+    if config["loss"]["loss_type"] == 'combined':
+        loss_fn = combined_loss(
+            config["loss"]["winlen"],
+            config["fs"],
+            config["loss"]["f_fade_out_complex_low"],
+            config["loss"]["f_fade_out_complex_high"],
+            config["loss"]["complex_weight"],
+            n_ffts=config["loss"]["mres_fft_sizes"],
+            gamma=config["loss"]["mres_gamma"],
+            mrspec_lambda=config["loss"]["mres_factor"],
+            ccmse_lambda=config["loss"]["spec_factor"]
+        ).to(device)
+        
+        
     while steps < config["max_steps"]:
         for batch in train_dataloader:
             y, m, rms = batch
@@ -199,15 +213,18 @@ def main():
 
             optim.zero_grad()
             y_denoised = denoise_net(m)
-            loss = complex_compressed_spec_mse(
-                y / rms[:, None],
-                y_denoised / rms[:, None],
-                config["loss"]["winlen"],
-                config["fs"],
-                config["loss"]["f_fade_out_complex_low"],
-                config["loss"]["f_fade_out_complex_high"],
-                config["loss"]["complex_weight"],
-            )
+            if config["loss"]["loss_type"] == 'combined':
+                loss = loss_fn(y / rms[:, None], y_denoised / rms[:, None])
+            else:
+                loss = complex_compressed_spec_mse(
+                    y / rms[:, None],
+                    y_denoised / rms[:, None],
+                    config["loss"]["winlen"],
+                    config["fs"],
+                    config["loss"]["f_fade_out_complex_low"],
+                    config["loss"]["f_fade_out_complex_high"],
+                    config["loss"]["complex_weight"],
+                )
             loss.backward()
             optim.step()
             train_loss_sum += loss.detach().cpu().numpy()
@@ -259,7 +276,11 @@ def main():
 
                 train_loss = train_loss_sum / config["val_interval"]
                 train_loss_sum = 0
-                sw.add_scalar("Train Loss", train_loss, steps)
+                if config["loss"]["loss_type"] == 'combined':
+                    sw.add_scalar("Train Loss (COMBO)", train_loss, steps)
+                else:
+                    sw.add_scalar("Train Loss", train_loss, steps)
+                    
                 sw.add_scalar("Learning Rate", scheduler.get_last_lr()[0], steps)
 
             if steps >= config["max_steps"]:
@@ -293,15 +314,29 @@ def validate(
 
             noisy_all.append(m[0, :].cpu().numpy())
             y_g_hat = denoise_net(m)
-            loss = complex_compressed_spec_mse(
-                y / rms[:, None],
-                y_g_hat / rms[:, None],
-                config["loss"]["winlen"],
-                config["fs"],
-                config["loss"]["f_fade_out_complex_low"],
-                config["loss"]["f_fade_out_complex_high"],
-                config["loss"]["complex_weight"],
-            )
+            if config["loss"]["loss_type"] == 'combined':
+                val_loss_fn = combined_loss(
+                            config["loss"]["winlen"],
+                            config["fs"],
+                            config["loss"]["f_fade_out_complex_low"],
+                            config["loss"]["f_fade_out_complex_high"],
+                            config["loss"]["complex_weight"],
+                            n_ffts=config["loss"]["mres_fft_sizes"],
+                            gamma=config["loss"]["mres_gamma"],
+                            mrspec_lambda=config["loss"]["mres_factor"],
+                            ccmse_lambda=config["loss"]["spec_factor"]
+                ).to(device)
+                loss = val_loss_fn(y / rms[:, None], y_g_hat / rms[:, None])
+            else:
+                loss = complex_compressed_spec_mse(
+                    y / rms[:, None],
+                    y_g_hat / rms[:, None],
+                    config["loss"]["winlen"],
+                    config["fs"],
+                    config["loss"]["f_fade_out_complex_low"],
+                    config["loss"]["f_fade_out_complex_high"],
+                    config["loss"]["complex_weight"],
+                )
             loss_all.append(loss.cpu().numpy())
             denoised_all.append(y_g_hat[0, :].cpu().numpy())
             y_all.append(y[0, :].cpu().numpy())
@@ -321,7 +356,10 @@ def validate(
     mean_xlsr_mos = np.mean(lengths_all * np.array(xlsr_mos_all)) / np.mean(lengths_all)
     mean_sisdr = np.mean(lengths_all * np.array(sisdr_all)) / np.mean(lengths_all)
 
-    sw.add_scalar("Loss", mean_loss, step)
+    if config["loss"]["loss_type"] == 'combined':
+        sw.add_scalar("Loss (COMBO)", mean_loss, step)
+    else:
+        sw.add_scalar("Loss", mean_loss, step)
     sw.add_scalar("PESQ", mean_pesq, step)
     sw.add_scalar("SI-SDR", mean_sisdr, step)
     sw.add_scalar("DNSMOS-OVR", mean_ovr, step)
