@@ -8,13 +8,13 @@ import glob
 import os
 import tqdm
 
-def spectral_augment(x):
+def spectral_augment_fn(x):
     def random_coeff():
         return np.random.uniform(-3 / 8, 3 / 8)
 
     b = [1, random_coeff(), random_coeff()]
     a = [1, random_coeff(), random_coeff()]
-    return [scipy.signal.lfilter(b, a, y, axis=0) for y in x]
+    return scipy.signal.lfilter(b, a, x, axis=0)
 
 
 def load_paths(dns4_root_datasets_fullband, vctk_txt_root):
@@ -183,6 +183,8 @@ def generate_noisy_speech_sample(
     apply_noise,
     rir_percentage,
     fs,
+    derev_decay_t60=0.15,
+    spectral_augment=False,
 ):
     if duration == None:
         s, fs_speech = soundfile.read(speech_filepath, dtype="float32")
@@ -208,6 +210,9 @@ def generate_noisy_speech_sample(
     s = scipy.signal.resample_poly(s, fs, fs_speech)
     s = s[:target_len]
 
+    if spectral_augment:
+        s = spectral_augment_fn(s)
+
     b, a = scipy.signal.butter(2, 50, "high", fs=fs)
     s = scipy.signal.lfilter(b, a, s)
 
@@ -225,7 +230,7 @@ def generate_noisy_speech_sample(
         t0 = t0_ind / fs
         t = t_ind / fs
         w_rir = np.ones((rir.shape[0],))
-        w_rir[t > t0] = 10 ** (3 * (-(t[t > t0] - t0) / 0.15))
+        w_rir[t > t0] = 10 ** (3 * (-(t[t > t0] - t0) / derev_decay_t60))
         rir_mod = w_rir * rir
         s_target = scipy.signal.fftconvolve(s, rir_mod)[: s.shape[0]]
 
@@ -284,6 +289,9 @@ def generate_noisy_speech_sample(
         n = scipy.signal.resample_poly(n, fs, fs_noise)
         n = n[:target_len]
 
+        if spectral_augment:
+            n = spectral_augment_fn(n)
+
         if n.shape[0] < target_len:
             n = np.concatenate([n, n])
 
@@ -326,6 +334,8 @@ class NoisySpeechDataset(data.Dataset):
         rir_percentage,
         fs,
         weighted_sampling=False,
+        derev_decay_t60=0.15,
+        spectral_augment=False,
     ):
         self.speech_filepath_list = speech_filepath_list
         self.noise_filepath_list = noise_filepath_list
@@ -336,6 +346,8 @@ class NoisySpeechDataset(data.Dataset):
         self.apply_noise = apply_noise
         self.rir_percentage = rir_percentage
         self.fs = fs
+        self.derev_decay_t60 = derev_decay_t60
+        self.spectral_augment = spectral_augment
 
         self.length = len(speech_filepath_list)
         if weighted_sampling:
@@ -376,6 +388,8 @@ class NoisySpeechDataset(data.Dataset):
                     self.apply_noise,
                     self.rir_percentage,
                     self.fs,
+                    self.derev_decay_t60,
+                    self.spectral_augment
                 )
                 break
             except Exception as e:
