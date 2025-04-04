@@ -170,7 +170,7 @@ cython_debug/
 # PyPI configuration file
 .pypirc
 
-directories_default.toml
+directories.toml
 
 *.out
 .vscode/*

@@ -1,3 +1,0 @@
-DNS4_root = "/media/DATA/shared/datasets/DNS4/datasets_fullband/datasets_fullband/"
-VCTK_txt_root = "/media/DATA/shared/datasets/vctk_txt/txt/"
-chkpt_logs_path = "/media/DATA/01_PhD/03_Experiments/low_latency_se/"
