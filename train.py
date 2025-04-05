@@ -13,7 +13,7 @@ import torch
 from metrics import compute_dnsmos, compute_pesq, compute_distillmos, compute_xlsr_sqa_mos, compute_sisdr
 from dataset import NoisySpeechDataset, load_paths
 from models import SpeechEnhancementModel
-from losses import complex_compressed_spec_mse, combined_loss
+from losses import complex_compressed_spec_mse, combined_loss, MultiResSpecLoss
 import glob
 import soundfile
 
@@ -170,28 +170,6 @@ def main():
     os.makedirs(log_dir, exist_ok=True)
     sw = SummaryWriter(log_dir)
 
-    if validate_only:
-        validate(
-            denoise_net,
-            val_dataloader,
-            config,
-            device,
-            sw,
-            steps,
-            val_tensorboard_examples,
-            txt_val,
-        )
-        exit()
-        
-    if test_only:
-        test_model(
-        denoise_net, test_dataloader, config, device, log_dir, pathconfig, txt_test
-                )
-        exit()
-
-    denoise_net.train()
-    train_loss_sum = 0
-    pbar = tqdm.tqdm(np.arange(config['max_steps']), initial=steps)
     if config["loss"]["loss_type"] == 'combined':
         loss_fn = combined_loss(
             config["loss"]["winlen"],
@@ -204,7 +182,41 @@ def main():
             mrspec_lambda=config["loss"]["mres_factor"],
             ccmse_lambda=config["loss"]["spec_factor"]
         ).to(device)
+    elif config["loss"]["loss_type"] == 'multires':
+        loss_fn = MultiResSpecLoss(
+            config["loss"]["mres_fft_sizes"],
+            gamma=config["loss"]["mres_gamma"],
+            factor=config["loss"]["mres_factor"],
+            f_complex=config["loss"]["spec_factor"]
+        ).to(device)
+        loss_fn = torch.jit.script(loss_fn, example_inputs=(torch.randn(1, 16000).to(device), torch.randn(1, 16000).to(device)))
+    else:
+        loss_fn = None        
+
+    if validate_only:
+        validate(
+            denoise_net,
+            val_dataloader,
+            config,
+            device,
+            sw,
+            steps,
+            val_tensorboard_examples,
+            txt_val,
+            loss_fn
+        )
+        exit()
         
+    if test_only:
+        test_model(
+        denoise_net, test_dataloader, config, device, log_dir, pathconfig, txt_test
+                )
+        exit()
+
+    denoise_net.train()
+    train_loss_sum = 0
+    pbar = tqdm.tqdm(np.arange(config['max_steps']), initial=steps)
+    
         
     while steps < config["max_steps"]:
         for batch in train_dataloader:
@@ -213,7 +225,7 @@ def main():
 
             optim.zero_grad()
             y_denoised = denoise_net(m)
-            if config["loss"]["loss_type"] == 'combined':
+            if config["loss"]["loss_type"] in ['combined', 'multires']:
                 loss = loss_fn(y / rms[:, None], y_denoised / rms[:, None])
             else:
                 loss = complex_compressed_spec_mse(
@@ -258,6 +270,7 @@ def main():
                     steps,
                     val_tensorboard_examples,
                     txt_val,
+                    loss_fn,
                 )
                 denoise_net.train()
 
@@ -301,6 +314,7 @@ def validate(
     step,
     val_tensorboard_examples,
     txt_val,
+    loss_fn
 ):
     np.random.seed(config["data_distribution_seed"])
 
@@ -314,19 +328,8 @@ def validate(
 
             noisy_all.append(m[0, :].cpu().numpy())
             y_g_hat = denoise_net(m)
-            if config["loss"]["loss_type"] == 'combined':
-                val_loss_fn = combined_loss(
-                            config["loss"]["winlen"],
-                            config["fs"],
-                            config["loss"]["f_fade_out_complex_low"],
-                            config["loss"]["f_fade_out_complex_high"],
-                            config["loss"]["complex_weight"],
-                            n_ffts=config["loss"]["mres_fft_sizes"],
-                            gamma=config["loss"]["mres_gamma"],
-                            mrspec_lambda=config["loss"]["mres_factor"],
-                            ccmse_lambda=config["loss"]["spec_factor"]
-                ).to(device)
-                loss = val_loss_fn(y / rms[:, None], y_g_hat / rms[:, None])
+            if config["loss"]["loss_type"] in ['combined', 'multires']:
+                loss = loss_fn(y / rms[:, None], y_g_hat / rms[:, None])
             else:
                 loss = complex_compressed_spec_mse(
                     y / rms[:, None],

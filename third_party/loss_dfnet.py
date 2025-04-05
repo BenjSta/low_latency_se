@@ -45,18 +45,15 @@ class Stft(nn.Module):
         self.register_buffer("w", window)
 
     def forward(self, input: Tensor):
-        # Time-domain input shape: [B, *, T]
-        t = input.shape[-1]
-        sh = input.shape[:-1]
+        # Time-domain input shape: [B, T]
         out = torch.stft(
-            input.reshape(-1, t),
+            input,
             n_fft=self.n_fft,
             hop_length=self.hop,
             window=self.w,
             normalized=True,
             return_complex=True,
         )
-        out = out.view(*sh, *out.shape[-2:])
         return out
 
 
