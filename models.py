@@ -251,7 +251,8 @@ class SpeechEnhancementModel(nn.Module):
         learnable_transforms=True,
         downsample_factor=1,
         algorithmic_delay_filtering=0,
-        filtlen = None
+        filtlen = None,
+        output_mapping = "star",
     ):
         """
         Initialize the Speech Enhancement Model.
@@ -268,9 +269,11 @@ class SpeechEnhancementModel(nn.Module):
             downsample_factor (int): Factor to downsample / upsample before/after the neural network, only applies for complex_filter, defaults to 1
             algorithmic_delay_filtering (int): Algorithmic delay for time domain filtering, only applies for time_domain_filter, defaults to 0
             filtlen (int): Length of the filter to be learned, only applies for time_domain_filter, defaults to None, which is equal to winlen
+            output_mapping (str): Output mapping method, one of "star" or "re/im"
         """
         super().__init__()
 
+        self.output_mapping = output_mapping
         if method=="complex_mapping":
             self.num_filter_frames = 1
         else:
@@ -282,8 +285,9 @@ class SpeechEnhancementModel(nn.Module):
             self.downsample_factor = downsample_factor
             
         crn_config["fsize_input"] = winlen // 2 + 1
-        crn_config["num_output_channels"] =  self.num_filter_frames * 3
-        crn_config["output_nonlinearity"] = "ELU" if (method == "time_domain_filtering" or use_mlp) else ("Sigmoid" if method == "complex_filter" else "Softplus")
+        crn_config["num_output_channels"] =  self.num_filter_frames * 3 if (self.output_mapping == "star" or method == "time_domain_filtering" or use_mlp) else self.num_filter_frames * 2
+        crn_config["output_nonlinearity"] = "ELU" if (method == "time_domain_filtering" or use_mlp) else (
+            "Sigmoid" if method == "complex_filter" else "Softplus") if self.output_mapping == "star" else "Identity"
 
         # Initialize CRN model
         self.crn = CRN(**crn_config)
@@ -356,11 +360,13 @@ class SpeechEnhancementModel(nn.Module):
             )
             
             if use_mlp:
-                mlp_out = 3 * (winlen // 2 + 1)
+                mlp_out = (3 if self.output_mapping == "star" else 2) * (winlen // 2 + 1)
                 self.mlp = nn.Sequential(
                     nn.Linear(3 * (winlen // 2 + 1), mlp_out),
-                    nn.Sigmoid()
-                )
+                    (
+                        nn.Sigmoid() if method == "complex_filter" else nn.Softplus()) if self.output_mapping == "star" else (
+                        nn.Identity()
+                    ))
 
             self.algorithmic_delay_filtering = None
         elif method == "time_domain_filtering":
@@ -444,11 +450,13 @@ class SpeechEnhancementModel(nn.Module):
         x = torch.repeat_interleave(x, self.downsample_factor, dim=3)[..., :nfr, :]
 
         if self.method == "complex_filter":
-            x = torch.einsum("bijkm,li->bljkm", x, self.v)
+            if self.output_mapping == "star":
+                x = torch.einsum("bijkm,li->bljkm", x, self.v)
             return self._complex_filtering(x, x_complex, xlen)
         
         elif self.method == "complex_mapping":
-            x = torch.einsum("bijkm,li->bljkm", x, self.v)
+            if self.output_mapping == "star":
+                x = torch.einsum("bijkm,li->bljkm", x, self.v)
             # remove number of filter frames dimension
             x = x.squeeze(2)
             x = torch.cat([x[:, 0, ...], x[:, 1, ...]], dim=-1).permute(0, 2, 1)
