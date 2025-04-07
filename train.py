@@ -13,7 +13,7 @@ import torch
 from metrics import compute_dnsmos, compute_pesq, compute_distillmos, compute_xlsr_sqa_mos, compute_sisdr
 from dataset import NoisySpeechDataset, load_paths
 from models import SpeechEnhancementModel
-from losses import complex_compressed_spec_mse, combined_loss, MultiResSpecLoss
+from losses import combined_loss, MultiResSpecLoss, ComplexCompressedSpecMSE
 import glob
 import soundfile
 
@@ -182,6 +182,8 @@ def main():
             mrspec_lambda=config["loss"]["mres_factor"],
             ccmse_lambda=config["loss"]["spec_factor"]
         ).to(device)
+        #loss_fn = torch.jit.script(loss_fn, example_inputs=(torch.randn(1, 16000).to(device), torch.randn(1, 16000).to(device)))
+    
     elif config["loss"]["loss_type"] == 'multires':
         loss_fn = MultiResSpecLoss(
             config["loss"]["mres_fft_sizes"],
@@ -189,9 +191,16 @@ def main():
             factor=config["loss"]["mres_factor"],
             f_complex=config["loss"]["spec_factor"]
         ).to(device)
-        loss_fn = torch.jit.script(loss_fn, example_inputs=(torch.randn(1, 16000).to(device), torch.randn(1, 16000).to(device)))
-    else:
-        loss_fn = None        
+        #loss_fn = torch.jit.script(loss_fn, example_inputs=(torch.randn(1, 16000).to(device), torch.randn(1, 16000).to(device)))
+    elif config["loss"]["loss_type"] == 'ccmse':
+        loss_fn = ComplexCompressedSpecMSE(
+            config["loss"]["winlen"],
+            config["fs"],
+            config["loss"]["f_fade_out_complex_low"],
+            config["loss"]["f_fade_out_complex_high"],
+            config["loss"]["complex_weight"]
+        ).to(device)
+        #loss_fn = torch.jit.script(loss_fn, example_inputs=(torch.randn(1, 16000).to(device), torch.randn(1, 16000).to(device)))
 
     if validate_only:
         validate(
@@ -225,18 +234,8 @@ def main():
 
             optim.zero_grad()
             y_denoised = denoise_net(m)
-            if config["loss"]["loss_type"] in ['combined', 'multires']:
-                loss = loss_fn(y / rms[:, None], y_denoised / rms[:, None])
-            else:
-                loss = complex_compressed_spec_mse(
-                    y / rms[:, None],
-                    y_denoised / rms[:, None],
-                    config["loss"]["winlen"],
-                    config["fs"],
-                    config["loss"]["f_fade_out_complex_low"],
-                    config["loss"]["f_fade_out_complex_high"],
-                    config["loss"]["complex_weight"],
-                )
+            #if config["loss"]["loss_type"] in ['combined', 'multires', 'ccmse']:
+            loss = loss_fn(y / rms[:, None], y_denoised / rms[:, None])
             loss.backward()
             optim.step()
             train_loss_sum += loss.detach().cpu().numpy()
@@ -328,18 +327,10 @@ def validate(
 
             noisy_all.append(m[0, :].cpu().numpy())
             y_g_hat = denoise_net(m)
-            if config["loss"]["loss_type"] in ['combined', 'multires']:
+            if config["loss"]["loss_type"] in ['combined', 'multires', 'ccmse']:
                 loss = loss_fn(y / rms[:, None], y_g_hat / rms[:, None])
             else:
-                loss = complex_compressed_spec_mse(
-                    y / rms[:, None],
-                    y_g_hat / rms[:, None],
-                    config["loss"]["winlen"],
-                    config["fs"],
-                    config["loss"]["f_fade_out_complex_low"],
-                    config["loss"]["f_fade_out_complex_high"],
-                    config["loss"]["complex_weight"],
-                )
+                raise ValueError("Invalid loss type")
             loss_all.append(loss.cpu().numpy())
             denoised_all.append(y_g_hat[0, :].cpu().numpy())
             y_all.append(y[0, :].cpu().numpy())
