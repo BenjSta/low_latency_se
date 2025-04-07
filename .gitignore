@@ -176,5 +176,3 @@ directories.toml
 .vscode/*
 logs/*
 checkpoints/*
-checkpoints/*
-
