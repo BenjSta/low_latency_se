@@ -317,7 +317,7 @@ def generate_noisy_speech_sample(
     return (
         torch.clip(torch.from_numpy(s_target.astype("float32")), -1, 1),
         torch.clip(torch.from_numpy(m.astype("float32")), -1, 1),
-        10 ** (target_speech_rms / 20),
+        np.array((10 ** (target_speech_rms / 20))).astype("float32"),
     )
 
 
