@@ -371,7 +371,7 @@ def validate(
         )
 
     np.random.seed()
-    return mean_distillmos
+    return mean_xlsr_mos + mean_ovr + mean_distillmos
 
 
 def resample_batch(y, m, fs_in, fs_out):

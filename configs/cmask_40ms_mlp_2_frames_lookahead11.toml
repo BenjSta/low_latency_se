@@ -1,0 +1,56 @@
+batch_size=64
+fs = 16000
+train_seq_duration = 4.0
+lr_start = 0.0002
+lr_stop = 0.00005
+lr_update_interval = 1000
+val_interval = 20000
+max_steps = 700000
+num_workers = 14
+data_distribution_seed = 1
+
+[model]
+hopsize = 160
+algorithmic_delay_nn=640
+winlen = 320
+method = "complex_filter"
+use_mlp = false
+num_filter_frames = 5
+learnable_transforms = true
+downsample_factor = 1
+output_mapping = "re/im"
+
+[model.crn_config]
+num_channels_encoder = [2, 27, 34, 41, 48]
+kernel_sizes = [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]]
+fstride = 2
+n_gru_layers = 1
+n_gru_groups = 2
+nonlinearity = "ELU"
+batch_norm = true
+
+[loss]
+winlen = 320
+complex_weight = 0.3
+f_fade_out_complex_low = 8100
+f_fade_out_complex_high = 8200
+spec_factor = 1000
+loss_type="ccmse"
+mres_factor = 500
+mres_gamma = 0.3
+mres_fft_sizes = [86,172,344]
+
+[data_distribution]
+derev_decay_t60=0.3
+snr_mu_and_sigma=[15, 10]
+speech_rms_mu_and_sigma=[-20, 7]
+apply_noise=true
+rir_percentage=0.75
+spectral_augment = true
+
+
+
+
+
+
+

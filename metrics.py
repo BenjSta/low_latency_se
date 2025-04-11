@@ -1,7 +1,9 @@
 import scipy.signal
 import numpy as np
 from werpy import wer as compute_wer, normalize as norm_text
+import xls_r_sqa.config
 import xls_r_sqa.e2e_model
+import xls_r_sqa.sqa_model
 from third_party.dnsmos_local import ComputeScore
 from pesq import pesq
 import tqdm
@@ -44,11 +46,17 @@ def compute_distillmos(list_of_signals, fs, device):
     pbar.set_description("Computing DistillMOS...")
     with torch.no_grad():
         for s in pbar:
+            s_resampled = torch.from_numpy(
+                        scipy.signal.resample_poly(s, 16000, fs)
+                    ).float().to(device)[None, :]
+            # if s_resampled.shape[1] < distillmos.sqa.SEQ_LEN:
+            #     # repeat the signal multiple times to fill the sequence length
+            #     s_resampled = s_resampled.repeat(1, distillmos.sqa.SEQ_LEN // s_resampled.shape[1] + 1)
+            #     s_resampled = s_resampled[:, :distillmos.sqa.SEQ_LEN]
+
             distillmos_scores.append(
                 distillmos_model(
-                    torch.from_numpy(
-                        scipy.signal.resample_poly(s / np.max(np.abs(s)), 16000, fs)
-                    ).float().to(device)[None, :]
+                    s_resampled
                 ).detach().cpu().numpy().squeeze().item()
               
             )
@@ -70,11 +78,16 @@ def compute_xlsr_sqa_mos(list_of_signals, fs, device):
     pbar = tqdm.tqdm(list_of_signals)
     with torch.no_grad():
         for s in pbar:
+            s_resampled = torch.from_numpy(
+                        scipy.signal.resample_poly(s, 16000, fs)
+                    ).float().to(device)[None, :]
+            # if s_resampled.shape[1] < int(xls_r_sqa.config.FEAT_SEQ_LEN / 50 * 16000):
+            #     # repeat the signal multiple times to fill the sequence length
+            #     s_resampled = s_resampled.repeat(1, int(xls_r_sqa.config.FEAT_SEQ_LEN / 50 * 16000) // s_resampled.shape[1] + 1)
+            #     s_resampled = s_resampled[:, :int(xls_r_sqa.config.FEAT_SEQ_LEN / 50 * 16000)]
             xlsr_sqa_scores.append(
                 xlsr_sqa_model(
-                    torch.from_numpy(
-                        scipy.signal.resample_poly(s / np.max(np.abs(s)), 16000, fs)
-                    ).float().to(device)[None, :]
+                    s_resampled
                 ).detach().cpu().numpy().squeeze().item()
             )
 
@@ -134,7 +147,7 @@ def compute_dnsmos(list_of_signals, fs):
     pbar.set_description("Computing DNSMOS...")
 
     for s in pbar:
-        d = dnsmos_obj(scipy.signal.resample_poly(s / np.max(np.abs(s)), 16000, fs))
+        d = dnsmos_obj(scipy.signal.resample_poly(s, 16000, fs))
         dnsmos_ovrl.append(d["OVRL"])
         dnsmos_bak.append(d["BAK"])
         dnsmos_sig.append(d["SIG"])

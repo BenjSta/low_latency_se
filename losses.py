@@ -12,7 +12,7 @@ class ComplexCompressedSpecMSE(nn.Module):
         self.f_fade_high = f_fade_high
         self.lf_complex_loss_weight = lf_complex_loss_weight
         self.stft = Stft(winlen, winlen // 2, torch.hann_window(winlen))
-        self.spectral_loss = SpectralLoss(0.3, 1, 1, 1)
+        self.spectral_loss = SpectralLoss(0.3, 1-lf_complex_loss_weight, lf_complex_loss_weight, 1)
 
     def forward(self, y_true: torch.Tensor, y_pred: torch.Tensor) -> torch.Tensor:
         y_stft = self.stft(
