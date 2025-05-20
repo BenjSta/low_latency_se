@@ -553,8 +553,6 @@ class SpeechEnhancementModel(nn.Module):
             :, :n_frames_shorter, :
         ]  # [batch, n_frames, 2 * hopsize + winlen - 1]
 
-        x_frame = x_frame * self.analysis_window_filtering[None, None, :]
-
         filt = filt[
             :, :, :n_frames_shorter, :
         ]  # [batch, num_filter_frames, n_frames, winlen]
