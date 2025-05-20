@@ -330,15 +330,6 @@ class SpeechEnhancementModel(nn.Module):
                 requires_grad=True,
             )
 
-            analysis_window_filtering, _ = asymmetric_hann_window_pair(
-                filtlen + hopsize * 2, hopsize * 2
-            )
-            synthesis_window_filtering = torch.flip(
-                analysis_window_filtering, [0]
-            )
-            self.analysis_window_filtering = nn.Parameter(analysis_window_filtering, requires_grad=True)
-            self.synthesis_window_filtering = nn.Parameter(synthesis_window_filtering, requires_grad=True)
-
 
         # Initialize forward and inverse STFT transforms
         stft_matrix = (
@@ -551,7 +542,6 @@ class SpeechEnhancementModel(nn.Module):
                 self.algorithmic_delay_filtering,
             ),
         ).unfold(1, 2 * self.hopsize + self.filtlen, self.hopsize)
-
         n_frames_shorter = min(x_frame.size(1), filt.size(2))
         x_frame = x_frame[
             :, :n_frames_shorter, :
@@ -576,7 +566,6 @@ class SpeechEnhancementModel(nn.Module):
             torch.sum(x_fft * filt_fft, 1), n=2 * self.hopsize + self.filtlen, dim=-1
         )
 
-        
 
         # use only valid part of the convolution
         x_filt = x_filt[
