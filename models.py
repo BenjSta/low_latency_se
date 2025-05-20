@@ -570,17 +570,17 @@ class SpeechEnhancementModel(nn.Module):
         )  # [batch, num_filter_frames, n_frames, 2 * hopsize + winlen - 1]
 
         # now do the convolution using FFT
-        x_fft = torch.fft.rfft(x_frame, n=2 * self.hopsize + 2 * self.filtlen, dim=-1)
-        filt_fft = torch.fft.rfft(filt, n=2 * self.hopsize + 2 * self.filtlen, dim=-1)
+        x_fft = torch.fft.rfft(x_frame, n=2 * self.hopsize + self.filtlen, dim=-1)
+        filt_fft = torch.fft.rfft(filt, n=2 * self.hopsize + self.filtlen, dim=-1)
         x_filt = torch.fft.irfft(
-            torch.sum(x_fft * filt_fft, 1), n=2 * self.hopsize + 2 * self.filtlen, dim=-1
+            torch.sum(x_fft * filt_fft, 1), n=2 * self.hopsize + self.filtlen, dim=-1
         )
 
         
 
         # use only valid part of the convolution
         x_filt = x_filt[
-            :, :, -2 * self.hopsize - self.filtlen:
+            :, :, -2 * self.hopsize:
         ]  # [batch, n_frames_shorter, 2 * hopsize]
 
         # apply crossfade window
@@ -591,9 +591,9 @@ class SpeechEnhancementModel(nn.Module):
                 x_filt.permute(0, 2, 1),
                 output_size=(
                     1,
-                    (n_frames_shorter - 1) * self.hopsize + 2 * self.hopsize + self.filtlen,
+                    (n_frames_shorter - 1) * self.hopsize + 2 * self.hopsize,
                 ),
-                kernel_size=(1, 2 * self.hopsize + self.filtlen),
+                kernel_size=(1, 2 * self.hopsize),
                 stride=(1, self.hopsize),
             )
             .squeeze(2)
