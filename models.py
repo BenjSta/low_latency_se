@@ -253,6 +253,7 @@ class SpeechEnhancementModel(nn.Module):
         downsample_factor=1,
         algorithmic_delay_filtering=0,
         filtlen = None,
+        inv_trans_mlp = True,
         output_mapping = "star",
     ):
         """
@@ -376,17 +377,22 @@ class SpeechEnhancementModel(nn.Module):
                 algorithmic_delay_filtering <= winlen // 2
             ), "Algorithmic delay must be less or equal to winlen // 2"
 
-            self.inverse_transform = nn.Sequential(
-                nn.Linear(3 * (winlen // 2 + 1), winlen),
-                #nn.BatchNorm1d(winlen),
-                nn.ELU(),
-                nn.Linear(winlen, winlen),
-                #nn.BatchNorm1d(winlen),
-                nn.ELU(),
-                nn.Linear(winlen, filtlen),
-                nn.Tanh(),
-            )
-
+            if inv_trans_mlp:
+                self.inverse_transform = nn.Sequential(
+                    nn.Linear(3 * (winlen // 2 + 1), winlen),
+                    #nn.BatchNorm1d(winlen),
+                    nn.ELU(),
+                    nn.Linear(winlen, winlen),
+                    #nn.BatchNorm1d(winlen),
+                    nn.ELU(),
+                    nn.Linear(winlen, filtlen),
+                    nn.Tanh(),
+                )
+            else:
+                self.inverse_transform = nn.Sequential(
+                    nn.Linear(3 * (winlen // 2 + 1), filtlen,bias=False),
+                    
+                )
             self.algorithmic_delay_filtering = algorithmic_delay_filtering
             
 
