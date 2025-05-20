@@ -2,7 +2,7 @@ data_distribution_seed = 1
 
 [data_distribution]
 derev_decay_t60=0.3
-snr_mu_and_sigma=[15, 10]
+snr_mu_and_sigma=[10.0, 10.0]
 speech_rms_mu_and_sigma=[-20, 7]
 apply_noise=true
 rir_percentage=0.75

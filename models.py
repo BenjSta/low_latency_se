@@ -177,7 +177,8 @@ class CRN(nn.Module):
                 output_padding_f_axis=output_padding_f_axis,
             )
             fsize = fsizes[-i - 2]
-            if batch_norm:
+            if batch_norm and i < (len(num_channels_decoder) - 2):
+                # Apply batch normalization only if not the last layer
                 block_wo_nonlin = nn.Sequential(
                     conv_layer, nn.BatchNorm2d(num_channels_decoder[i + 1])
                 )
@@ -285,9 +286,9 @@ class SpeechEnhancementModel(nn.Module):
             self.downsample_factor = downsample_factor
             
         crn_config["fsize_input"] = winlen // 2 + 1
-        crn_config["num_output_channels"] =  self.num_filter_frames * 3 if (self.output_mapping == "star" or method == "time_domain_filtering" or use_mlp) else self.num_filter_frames * 2
-        crn_config["output_nonlinearity"] = "ELU" if (method == "time_domain_filtering" or use_mlp) else (
-            "Sigmoid" if method == "complex_filter" else "Softplus") if self.output_mapping == "star" else "Identity"
+        crn_config["num_output_channels"] =  self.num_filter_frames * 3 if (self.output_mapping in ["star", "gated", "gatednorm"] or method == "time_domain_filtering" or use_mlp) else self.num_filter_frames * 2
+        crn_config["output_nonlinearity"] = (#"ELU" if (method == "time_domain_filtering" or use_mlp) else (
+            "Sigmoid" if method in ["complex_filter", "time_domain_filtering"] else "Softplus") if self.output_mapping == "star" else "Identity"
 
         # Initialize CRN model
         self.crn = CRN(**crn_config)
@@ -313,7 +314,7 @@ class SpeechEnhancementModel(nn.Module):
         elif method == "time_domain_filtering":
             # use an asymmetric analysis window
             analysis_window, _ = asymmetric_hann_window_pair(
-                winlen, np.max(algorithmic_delay_nn * 2, 0)
+                winlen, np.clip(algorithmic_delay_nn * 2, 0, winlen)
             )
 
             # use an asymmetric crossfade / synthesis window
@@ -328,6 +329,16 @@ class SpeechEnhancementModel(nn.Module):
                 torch.cat([crossfade_win_first_half, crossfade_win_second_half]),
                 requires_grad=True,
             )
+
+            analysis_window_filtering, _ = asymmetric_hann_window_pair(
+                filtlen + hopsize * 2, hopsize * 2
+            )
+            synthesis_window_filtering = torch.flip(
+                analysis_window_filtering, [0]
+            )
+            self.analysis_window_filtering = nn.Parameter(analysis_window_filtering, requires_grad=True)
+            self.synthesis_window_filtering = nn.Parameter(synthesis_window_filtering, requires_grad=True)
+
 
         # Initialize forward and inverse STFT transforms
         stft_matrix = (
@@ -360,7 +371,7 @@ class SpeechEnhancementModel(nn.Module):
             )
             
             if use_mlp:
-                mlp_out = (3 if self.output_mapping == "star" else 2) * (winlen // 2 + 1)
+                mlp_out = (3 if self.output_mapping in ["star", 'gated', 'gatednorm'] else 2) * (winlen // 2 + 1)
                 self.mlp = nn.Sequential(
                     nn.Linear(3 * (winlen // 2 + 1), mlp_out),
                     (
@@ -376,9 +387,13 @@ class SpeechEnhancementModel(nn.Module):
 
             self.inverse_transform = nn.Sequential(
                 nn.Linear(3 * (winlen // 2 + 1), winlen),
+                #nn.BatchNorm1d(winlen),
+                nn.ELU(),
+                nn.Linear(winlen, winlen),
+                #nn.BatchNorm1d(winlen),
                 nn.ELU(),
                 nn.Linear(winlen, filtlen),
-                nn.Tanh()
+                nn.Tanh(),
             )
 
             self.algorithmic_delay_filtering = algorithmic_delay_filtering
@@ -452,11 +467,34 @@ class SpeechEnhancementModel(nn.Module):
         if self.method == "complex_filter":
             if self.output_mapping == "star":
                 x = torch.einsum("bijkm,li->bljkm", x, self.v)
+            elif self.output_mapping == "gated":
+                # split into gate and gated part
+                x_gate = x[:, 0, ...]
+                x_gatee = torch.tanh(x[:, [1, 2], ...])
+                gate = torch.sigmoid(x_gate)
+                x = gate[:, None, :, :] * x_gatee
+            elif self.output_mapping == "gatednorm":
+                # split into gate and gated part
+                x_gate = x[:, 0, ...]
+                x_gatee = x[:, [1, 2], ...]
+                x_gatee = x_gatee / torch.norm(x_gatee, dim=1, keepdim=True)
+                gate = torch.sigmoid(x_gate)
+                x = gate[:, None, :, :] * x_gatee
             return self._complex_filtering(x, x_complex, xlen)
         
         elif self.method == "complex_mapping":
             if self.output_mapping == "star":
                 x = torch.einsum("bijkm,li->bljkm", x, self.v)
+            elif self.output_mapping == "gated":
+                # split into gate and gated part
+                x_gate = x[:, 0, ...]
+                x_gatee = x[:, [1, 2], ...]
+                gate = torch.sigmoid(x_gate)
+                x = gate[:, None, :, :] * x_gatee
+            elif self.output_mapping == "gatednorm":
+                raise ValueError(
+                    "Gatednorm output mapping is not supported for complex mapping"
+                )
             # remove number of filter frames dimension
             x = x.squeeze(2)
             x = torch.cat([x[:, 0, ...], x[:, 1, ...]], dim=-1).permute(0, 2, 1)
@@ -469,6 +507,12 @@ class SpeechEnhancementModel(nn.Module):
         fd_filt_complex = torch.complex(fd_filt[:, 0, ...], fd_filt[:, 1, ...])
         x_complex = nn.functional.pad(x_complex, (0, 0, self.num_filter_frames - 1, 0))
         x_complex = x_complex.unfold(1, self.num_filter_frames, 1).permute(0, 3, 1, 2)
+        # truncate to shorter length
+        n_frames_shorter = min(x_complex.size(2), fd_filt_complex.size(2))
+        x_complex = x_complex[:, :, :n_frames_shorter, :]
+        fd_filt_complex = fd_filt_complex[:, :, :n_frames_shorter, :]
+        
+        
         y = torch.einsum("bijk,bijk->bjk", x_complex, fd_filt_complex)
         y = torch.cat([y.real, y.imag], dim=-1).permute(0, 2, 1)
         
@@ -493,20 +537,28 @@ class SpeechEnhancementModel(nn.Module):
         fd_filt = fd_filt.permute(0, 2, 3, 1, 4)
 
         fd_filt = fd_filt.reshape(fd_filt.size(0), fd_filt.size(1), fd_filt.size(2), -1)
+        
+        # flatten to 2D
+        #fd_filt_shape0, fd_filt_shape1, fd_filt_shape2 = fd_filt.size(0), fd_filt.size(1), fd_filt.size(2)
+        #fd_filt = fd_filt.reshape(-1, fd_filt.shape[-1])
         filt = self.inverse_transform(fd_filt)
+        #filt = filt.reshape(fd_filt_shape0, fd_filt_shape1, fd_filt_shape2, filt.shape[-1])
 
         x_frame = nn.functional.pad(
             x_in,
             (
-                self.winlen - self.algorithmic_delay_filtering,
+                self.filtlen - self.algorithmic_delay_filtering,
                 self.algorithmic_delay_filtering,
             ),
-        ).unfold(1, 2 * self.hopsize + self.winlen - 1, self.hopsize)
+        ).unfold(1, 2 * self.hopsize + self.filtlen, self.hopsize)
 
         n_frames_shorter = min(x_frame.size(1), filt.size(2))
         x_frame = x_frame[
             :, :n_frames_shorter, :
         ]  # [batch, n_frames, 2 * hopsize + winlen - 1]
+
+        x_frame = x_frame * self.analysis_window_filtering[None, None, :]
+
         filt = filt[
             :, :, :n_frames_shorter, :
         ]  # [batch, num_filter_frames, n_frames, winlen]
@@ -518,33 +570,37 @@ class SpeechEnhancementModel(nn.Module):
         )  # [batch, num_filter_frames, n_frames, 2 * hopsize + winlen - 1]
 
         # now do the convolution using FFT
-        x_fft = torch.fft.rfft(x_frame, n=2 * self.hopsize + self.winlen - 1, dim=-1)
-        filt_fft = torch.fft.rfft(filt, n=2 * self.hopsize + self.winlen - 1, dim=-1)
+        x_fft = torch.fft.rfft(x_frame, n=2 * self.hopsize + 2 * self.filtlen, dim=-1)
+        filt_fft = torch.fft.rfft(filt, n=2 * self.hopsize + 2 * self.filtlen, dim=-1)
         x_filt = torch.fft.irfft(
-            torch.sum(x_fft * filt_fft, 1), n=2 * self.hopsize + self.winlen - 1, dim=-1
+            torch.sum(x_fft * filt_fft, 1), n=2 * self.hopsize + 2 * self.filtlen, dim=-1
         )
+
+        
 
         # use only valid part of the convolution
         x_filt = x_filt[
-            :, :, -2 * self.hopsize :
+            :, :, -2 * self.hopsize - self.filtlen:
         ]  # [batch, n_frames_shorter, 2 * hopsize]
 
         # apply crossfade window
-        x_filt = x_filt * self.crossfade_window[None, None, :]
+        x_filt = x_filt * self.synthesis_window_filtering[None, None, :]
 
         y = (
             nn.functional.fold(
                 x_filt.permute(0, 2, 1),
                 output_size=(
                     1,
-                    (n_frames_shorter - 1) * self.hopsize + 2 * self.hopsize,
+                    (n_frames_shorter - 1) * self.hopsize + 2 * self.hopsize + self.filtlen,
                 ),
-                kernel_size=(1, 2 * self.hopsize),
+                kernel_size=(1, 2 * self.hopsize + self.filtlen),
                 stride=(1, self.hopsize),
             )
             .squeeze(2)
             .squeeze(1)
         )
+        if y.shape[1] < xlen:
+            y = torch.nn.functional.pad(y, (0, xlen - y.shape[1]))
         return y[:, :xlen]
 
 
