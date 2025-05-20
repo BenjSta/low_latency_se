@@ -584,7 +584,7 @@ class SpeechEnhancementModel(nn.Module):
         ]  # [batch, n_frames_shorter, 2 * hopsize]
 
         # apply crossfade window
-        x_filt = x_filt * self.synthesis_window_filtering[None, None, :]
+        x_filt = x_filt * self.crossfade_window[None, None, :]
 
         y = (
             nn.functional.fold(
