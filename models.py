@@ -254,6 +254,7 @@ class SpeechEnhancementModel(nn.Module):
         algorithmic_delay_filtering=0,
         filtlen = None,
         inv_trans_mlp = True,
+        inv_trans_idft_init = False,
         output_mapping = "star",
     ):
         """
@@ -301,6 +302,7 @@ class SpeechEnhancementModel(nn.Module):
             filtlen = winlen
         self.filtlen = filtlen
         self.method = method
+        self.inv_trans_idft_init = inv_trans_idft_init
 
         if method == "time_domain_filtering":
             self.pad_size_nn = (winlen - algorithmic_delay_nn)
@@ -319,15 +321,16 @@ class SpeechEnhancementModel(nn.Module):
             )
 
             # use an asymmetric crossfade / synthesis window
-            fade_in = torch.hann_window(2 * algorithmic_delay_filtering)[
-                :algorithmic_delay_filtering
-            ]
-            crossfade_win_first_half = torch.cat(
-                [fade_in, torch.ones(hopsize - algorithmic_delay_filtering)]
-            )
-            crossfade_win_second_half = 1 - crossfade_win_first_half
+            # fade_in = torch.hann_window(2 * algorithmic_delay_filtering)[
+            #     :algorithmic_delay_filtering
+            # ]
+            # crossfade_win_first_half = torch.cat(
+            #     [fade_in, torch.ones(hopsize - algorithmic_delay_filtering)]
+            # )
+            # crossfade_win_second_half = 1 - crossfade_win_first_half
             self.crossfade_window = nn.Parameter(
-                torch.cat([crossfade_win_first_half, crossfade_win_second_half]),
+                torch.hann_window(2 * hopsize),
+                #torch.cat([crossfade_win_first_half, crossfade_win_second_half]),
                 requires_grad=True,
             )
 
@@ -389,10 +392,43 @@ class SpeechEnhancementModel(nn.Module):
                     nn.Tanh(),
                 )
             else:
-                self.inverse_transform = nn.Sequential(
-                    nn.Linear(3 * (winlen // 2 + 1), filtlen,bias=False),
+                if inv_trans_idft_init:
+                    invtran = torch.roll(
+                            torch.cat(
+                                [
+                                    istft_matrix_real.float(),
+                                    istft_matrix_imag.float(),
+                                ],
+                                dim=0,
+                            ),
+                            shifts=algorithmic_delay_filtering,
+                            dims=1,
+                        )
                     
-                )
+                    # fade out the second / acausal part of the window
+                    hann_fade_out = torch.hann_window(
+                        winlen - 2 * algorithmic_delay_filtering, periodic=True
+                    )[-winlen // 2 + algorithmic_delay_filtering :]
+                    invtran_envelope = torch.cat([
+                        torch.ones(algorithmic_delay_filtering + winlen // 2),
+                        hann_fade_out], dim=0)
+
+                    invtran = invtran * invtran_envelope[None, :]
+
+                    # truncate to the desired length
+                    invtran = invtran[:, : filtlen]
+                    self.inverse_transform = nn.Linear(
+                        2 * (winlen // 2 + 1), filtlen, bias=False
+                    )
+                    self.inverse_transform.weight.data = invtran.T.to(
+                        self.inverse_transform.weight.device
+                    )
+                else:
+
+                    self.inverse_transform = nn.Sequential(
+                        nn.Linear(3 * (winlen // 2 + 1), filtlen,bias=False),
+                        
+                    )
             self.algorithmic_delay_filtering = algorithmic_delay_filtering
             
 
@@ -498,6 +534,9 @@ class SpeechEnhancementModel(nn.Module):
             return self._linear_inverse_transform(x, xlen)
         
         elif self.method == "time_domain_filtering":
+            if self.inv_trans_idft_init:
+                # map to complex plane
+                x = torch.einsum("bijkm,li->bljkm", x, self.v)
             return self._time_domain_filtering(x, x_in, xlen)
 
     def _complex_filtering(self, fd_filt, x_complex, xlen):
@@ -535,10 +574,10 @@ class SpeechEnhancementModel(nn.Module):
 
         fd_filt = fd_filt.reshape(fd_filt.size(0), fd_filt.size(1), fd_filt.size(2), -1)
         
-        # flatten to 2D
-        #fd_filt_shape0, fd_filt_shape1, fd_filt_shape2 = fd_filt.size(0), fd_filt.size(1), fd_filt.size(2)
-        #fd_filt = fd_filt.reshape(-1, fd_filt.shape[-1])
+    
         filt = self.inverse_transform(fd_filt)
+
+        
         #filt = filt.reshape(fd_filt_shape0, fd_filt_shape1, fd_filt_shape2, filt.shape[-1])
 
         x_frame = nn.functional.pad(

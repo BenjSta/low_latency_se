@@ -51,15 +51,39 @@ def main():
 
     args = parser.parse_args()
 
-    resume = args.resume
-    validate_only = args.validate_no_training
-    test_only = args.test_no_training
-
     config = toml.load(args.config)
     config['train_name'] = os.path.basename(args.config).split('.')[0]
     os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda_visible_devices
     device = "cuda" if torch.cuda.is_available() else "cpu"
     pathconfig = toml.load("directories.toml")
+
+    denoise_net = SpeechEnhancementModel(**config["model"])
+    macs, params = get_model_complexity_info(
+        denoise_net, (20 * 16000,), as_strings=False, print_per_layer_stat=True
+    )
+
+    if config["model"]["method"] == "complex_filter": 
+        macs = (macs / 20 + #NN cost
+            config["fs"] / config["model"]["hopsize"] * (
+                4 * (config["model"]["winlen"] // 2 + 1) * denoise_net.num_filter_frames + #complex multiply per bin 
+                2 * (config["model"]["winlen"] // 2 + 1) * config["model"]["winlen"] + # forward transform
+                2 * (config["model"]["winlen"] // 2 + 1) * config["model"]["hopsize"] * 2) +  # inverse transform)
+            config["fs"] / config["model"]["hopsize"] / denoise_net.downsample_factor * 6 * (config["model"]["winlen"] // 2 + 1)) # mapping to complex plane
+
+    elif config["model"]["method"] == "time_domain_filtering":
+        macs = (macs / 20 + #NN cost
+            config["fs"] / config["model"]["hopsize"] * (
+                2 * (config["model"]["winlen"] // 2 + 1) * config["model"]["winlen"]) + # forward transform
+            2 * config["fs"] * denoise_net.filtlen * 0.5) # two parallel time-domain convolutions,
+        #with 0.5 for possible optimization by non-uniformly partitioned convolutions
+    
+    print("GMacs/s", macs / 10**9)
+    print("M Params", params / 10**6)
+    denoise_net.to(device)
+
+    resume = args.resume
+    validate_only = args.validate_no_training
+    test_only = args.test_no_training
 
     paths = load_paths(pathconfig["DNS4_root"], pathconfig["VCTK_txt_root"])
     clean_train, clean_val, clean_test = paths["clean"]
@@ -130,13 +154,7 @@ def main():
         drop_last=False,
     )
 
-    denoise_net = SpeechEnhancementModel(**config["model"])
-    macs, params = get_model_complexity_info(
-        denoise_net, (20 * 16000,), as_strings=False, print_per_layer_stat=True
-    )
-    print("GMacs/s", macs / 10**9 / 20)
-    print("M Params", params / 10**6)
-    denoise_net.to(device)
+    
 
     optim = torch.optim.AdamW(
         denoise_net.parameters(),
