@@ -6,7 +6,7 @@ lr_stop = 0.00005
 lr_update_interval = 1000
 val_interval = 20000
 max_steps = 700000
-num_workers = 14
+num_workers = 8
 data_distribution_seed = 1
 
 [model]
