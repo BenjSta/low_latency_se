@@ -174,9 +174,29 @@ def main():
     if resume:
         try:
             chkpt = torch.load(os.path.join(chkpt_dir, "latest"), weights_only=False)
+            
+            # give file permissions back to the user currently running the script
+            
+            # make sure to rename the file after loading, so that writing on the original name is possible despite file permissions
+            # remove any previous backup file
+            if os.path.exists(os.path.join(chkpt_dir, "latest_loaded_backup")):
+                os.remove(os.path.join(chkpt_dir, "latest_loaded_backup"))
+            os.rename(os.path.join(chkpt_dir, "latest"), os.path.join(chkpt_dir, "latest_loaded_backup"))
+            # now saving should be possible again
+            torch.save(chkpt, os.path.join(chkpt_dir, "latest"))
+
+            # do the same for the best checkpoint
+            best_chkpt = torch.load(os.path.join(chkpt_dir, "best"), weights_only=False)
+            if os.path.exists(os.path.join(chkpt_dir, "best_loaded_backup")):
+                os.remove(os.path.join(chkpt_dir, "best_loaded_backup"))
+
+            os.rename(os.path.join(chkpt_dir, "best"), os.path.join(chkpt_dir, "best_loaded_backup"))
+            
+            torch.save(best_chkpt, os.path.join(chkpt_dir, "best"))
+
             optim.load_state_dict(chkpt["optim"])
             denoise_net.load_state_dict(chkpt["denoiser"])
-            scheduler.load_state_dict(chkpt["scheduler"])
+            scheduler.load_state_dict(chkpt["scheduler"])            
             best_metric, steps = chkpt["best_metric"], chkpt["steps"]
         except FileNotFoundError:
             print("Checkpoint file not found. Starting from scratch.")
