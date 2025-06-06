@@ -464,6 +464,10 @@ def test_model(
     mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
     mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
 
+    # remove previous mean_metrics.txt if it exists
+    if os.path.exists(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt")):
+        os.remove(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"))
+
     with open(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"), "w") as f:
         f.write(
             "PESQ, SI-SDR, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS\n"
@@ -474,6 +478,10 @@ def test_model(
     metrics = np.stack((pesq_all, sisdr_all, ovr_all, sig_all, bak_all, distillmos_all, xlsrmos_all)).T
     header = "Index, PESQ, SI-SDR, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.arange(0, metrics.shape[0]), metrics))
+
+    if os.path.exists(os.path.join(log_dir, "synthetic_test", "metrics.csv")):
+        os.remove(os.path.join(log_dir, "synthetic_test", "metrics.csv"))
+
     np.savetxt(
         os.path.join(log_dir, "synthetic_test", "metrics.csv"),
         data,
@@ -517,6 +525,10 @@ def test_model(
     mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
     mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
 
+    # remove previous mean_metrics.txt if it exists
+    if os.path.exists(os.path.join(log_dir, "blind_test", "mean_metrics.txt")):
+        os.remove(os.path.join(log_dir, "blind_test", "mean_metrics.txt"))
+
     with open(os.path.join(log_dir, "blind_test", "mean_metrics.txt"), "w") as f:
         f.write(
             "DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS\n"
@@ -526,6 +538,10 @@ def test_model(
     metrics = np.stack((ovr_all, sig_all, bak_all, distillmos_all, xlsrmos_all)).T
     header = "filepath, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.array(blind_test_files, dtype=object), metrics))
+
+    if os.path.exists(os.path.join(log_dir, "blind_test", "metrics.csv")):
+        os.remove(os.path.join(log_dir, "blind_test", "metrics.csv"))
+
     np.savetxt(
         os.path.join(log_dir, "blind_test", "metrics.csv"),
         data,
