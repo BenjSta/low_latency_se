@@ -1,0 +1,31 @@
+\begin{tabular}{llllrrrrrrrrrr}
+\toprule
+\textbf{Delay} & \textbf{Interval} & \textbf{Method} & \textbf{Channels} & \multicolumn{5}{c}{\textbf{Synthetic Test}} & \multicolumn{3}{c}{\textbf{Blind Test}} & \textbf{Combined} \\
+ &  &  &  & PESQ & SI-SDR & DNSMOS & DistillMOS & XLS-R & DNSMOS & DistillMOS & XLS-R &  \\
+\midrule
+20.0 & 10 & CMask & [28, 38, 46, 54] & \cellcolor{green!20}1.94 & \cellcolor{green!20}8.11 & \cellcolor{green!20}2.54 & \cellcolor{green!20}2.51 & \cellcolor{green!20}2.49 & \cellcolor{green!20}2.70 & \cellcolor{green!20}3.02 & \cellcolor{green!20}2.62 & \cellcolor{green!50}2.65 \\
+20.0 & 10 & TD & [28, 37, 46, 54] & \cellcolor{green!20}1.94 & \cellcolor{green!20}7.99 & \cellcolor{green!20}2.52 & \cellcolor{green!20}2.48 & \cellcolor{green!20}2.44 & \cellcolor{green!20}2.64 & \cellcolor{green!20}2.84 & \cellcolor{green!20}2.48 & \cellcolor{green!50}2.57 \\
+\hdashline
+\midrule
+10.0 & 10 & CMask & [28, 37, 46, 54] & \cellcolor{green!20}1.88 & \cellcolor{green!20}7.76 & 2.46 & \cellcolor{green!20}2.46 & \cellcolor{green!20}2.41 & \cellcolor{green!20}2.65 & 2.90 & 2.50 & \cellcolor{green!50}2.56 \\
+10.0 & 5 & CMask & [21, 26, 31, 36] & 1.87 & 7.51 & \cellcolor{green!20}2.46 & 2.44 & 2.39 & 2.64 & \cellcolor{green!20}2.92 & \cellcolor{green!20}2.51 & 2.56 \\
+10.0 & 10 & TD & [28, 37, 46, 54] & \cellcolor{green!20}1.86 & \cellcolor{green!20}7.54 & \cellcolor{green!20}2.48 & \cellcolor{green!20}2.43 & \cellcolor{green!20}2.35 & 2.62 & 2.80 & 2.45 & 2.52 \\
+10.0 & 5 & TD & [21, 25, 30, 34] & 1.86 & 7.45 & 2.47 & 2.39 & 2.34 & \cellcolor{green!20}2.66 & \cellcolor{green!20}2.85 & \cellcolor{green!20}2.48 & \cellcolor{green!50}2.53 \\
+\hdashline
+\midrule
+5.0 & 10 & CMask & [28, 36, 44, 52] & 1.79 & 7.05 & 2.41 & \cellcolor{green!20}2.40 & \cellcolor{green!20}2.32 & 2.60 & \cellcolor{green!20}2.80 & \cellcolor{green!20}2.46 & \cellcolor{green!50}2.50 \\
+5.0 & 5 & CMask & [19, 25, 31, 36] & \cellcolor{green!20}1.82 & \cellcolor{green!20}7.08 & \cellcolor{green!20}2.42 & 2.40 & 2.32 & \cellcolor{green!20}2.60 & 2.77 & 2.40 & 2.48 \\
+5.0 & 10 & TD & [28, 37, 46, 54] & 1.79 & 7.03 & 2.42 & \cellcolor{green!20}2.33 & 2.27 & \cellcolor{green!20}2.61 & \cellcolor{green!20}2.70 & \cellcolor{green!20}2.46 & \cellcolor{green!50}2.47 \\
+5.0 & 5 & TD & [21, 25, 30, 34] & \cellcolor{green!20}1.82 & \cellcolor{green!20}7.13 & \cellcolor{green!20}2.43 & 2.33 & \cellcolor{green!20}2.28 & 2.57 & 2.64 & 2.38 & 2.44 \\
+\hdashline
+\midrule
+2.5 & 10 & CMask & [25, 33, 42, 50] & 1.74 & 6.49 & \cellcolor{green!20}2.39 & \cellcolor{green!20}2.32 & \cellcolor{green!20}2.27 & \cellcolor{green!20}2.57 & \cellcolor{green!20}2.65 & 2.38 & \cellcolor{green!50}2.43 \\
+2.5 & 5 & CMask & [19, 24, 28, 32] & \cellcolor{green!20}1.76 & \cellcolor{green!20}6.50 & 2.38 & 2.32 & 2.24 & 2.54 & 2.65 & \cellcolor{green!20}2.40 & 2.42 \\
+2.5 & 10 & TD & [28, 37, 46, 54] & 1.74 & \cellcolor{green!20}6.57 & 2.39 & \cellcolor{green!20}2.29 & \cellcolor{green!20}2.24 & \cellcolor{green!20}2.58 & \cellcolor{green!20}2.63 & \cellcolor{green!20}2.39 & \cellcolor{green!50}2.42 \\
+2.5 & 5 & TD & [21, 25, 30, 34] & \cellcolor{green!20}1.77 & 6.52 & \cellcolor{green!20}2.40 & 2.26 & 2.23 & 2.55 & 2.60 & 2.34 & 2.40 \\
+\hdashline
+\midrule
+-5.0 & 5 & TD & [21, 25, 30, 34] & 1.53 & 4.24 & 2.31 & 2.03 & 2.06 & 2.44 & 2.17 & 2.10 & 2.19 \\
+-5.0 & 5 & TD & [32, 64, 128, 128] & \cellcolor{green!20}1.62 & \cellcolor{green!20}5.37 & \cellcolor{green!20}2.35 & \cellcolor{green!20}2.09 & \cellcolor{green!20}2.13 & \cellcolor{green!20}2.49 & \cellcolor{green!20}2.36 & \cellcolor{green!20}2.26 & \cellcolor{green!50}2.28 \\
+\bottomrule
+\end{tabular}
