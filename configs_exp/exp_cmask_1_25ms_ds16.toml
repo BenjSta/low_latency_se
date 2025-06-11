@@ -20,7 +20,7 @@ learnable_transforms = true
 downsample_factor = 16
 
 [model.crn_config]
-num_channels_encoder = [2, 25, 29, 33, 38]
+num_channels_encoder = [2, 24, 29, 34, 38]
 kernel_sizes = [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]]
 fstride = 2
 n_gru_layers = 1
