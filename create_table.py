@@ -19,12 +19,15 @@ configs = [
     ("dfnet", 40, 10, 'DF (DFNet)'),
     ("exp_cmask_40ms_multiframe_lookahead", 40, 10, 'DF'),
     ("exp_cmask_10ms_ds2", 10, 10, 'CMask'),
+    ("exp_cmask_10ms_ds4", 10, 20, 'CMask'),
     ("exp_cmask_5ms_ds2", 5, 5, 'CMask'),
     ("exp_td_5ms_interval10", 5, 10, 'TD'),
     ("exp_cmask_2_5ms_ds4", 2.5, 5, 'CMask'),
     ("exp_cmask_20ms", 20, 10, 'CMask'),
     ("exp_td_2_5ms_interval5", 2.5, 5, 'TD'),
     ("exp_td_2_5ms_interval10", 2.5, 10, 'TD'),
+    ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
+    ("exp_td_1_25ms_interval10", 1.25, 10, 'TD'),    
     ("exp_td_-5ms_interval5", -5, 5, 'TD'),
     ("exp_td_20ms", 20, 10, 'TD'),
     ("exp_cmask_10ms", 10, 5, 'CMask'),
@@ -34,6 +37,8 @@ configs = [
     ("exp_td_5ms_interval5", 5, 5, 'TD'),
     ("exp_td_-5ms_interval5_big", -5, 5, 'TD'),
     ("exp_cmask_2_5ms_ds8", 2.5, 10, 'CMask'),
+    ("exp_cmask_1_25ms_ds8", 1.25, 5, 'CMask'),
+    ("exp_cmask_1_25ms_ds16", 1.25, 10, 'CMask'),
 ]
 
 # Convert to DataFrame
