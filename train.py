@@ -196,7 +196,7 @@ def main():
 
             optim.load_state_dict(chkpt["optim"])
             denoise_net.load_state_dict(chkpt["denoiser"])
-            scheduler.load_state_dict(chkpt["scheduler"])            
+            scheduler.load_state_dict(chkpt["scheduler"])  
             best_metric, steps = chkpt["best_metric"], chkpt["steps"]
         except FileNotFoundError:
             print("Checkpoint file not found. Starting from scratch.")
@@ -266,6 +266,10 @@ def main():
     
         
     while steps < config["max_steps"]:
+        if steps >= 7e5 and scheduler.gamma != 1.0:
+            scheduler.gamma = 1.0
+            print("Setting scheduler gamma to 1.0 after 700k steps")
+            
         for batch in train_dataloader:
             y, m, rms = batch
             y, m, rms = y.to(device), m.to(device), rms.to(device)
