@@ -34,6 +34,11 @@ configs = [
     ("exp_td_5ms_interval5", 5, 5, 'TD'),
     ("exp_td_-5ms_interval5_big", -5, 5, 'TD'),
     ("exp_cmask_2_5ms_ds8", 2.5, 10, 'CMask'),
+    ("exp_td_1_25ms_interval10", 1.25, 10, 'TD'),
+    ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
+    ("exp_cmask_1_25ms_ds8", 1.25, 5, 'CMask'),
+    ("exp_cmask_1_25ms_ds16", 1.25, 10, 'CMask'),
+    
 ]
 
 # Convert to DataFrame
@@ -207,16 +212,16 @@ def highlight_group(sub_df):
 grouped_rows = []
 for (delay,), group in df.groupby(['algorithmic delay'], sort=False):
     # Subgroup by method (CMask vs TD)
-    cmask = group[group['method'].str.contains('CMask', na=False)]
-    td = group[group['method'].str.contains('TD', na=False)]
-    if not cmask.empty:
-        grouped_rows.append(highlight_group(cmask))
-    if not td.empty:
-        grouped_rows.append(highlight_group(td))
-    # Insert dashed line if both present
-    if not cmask.empty and not td.empty:
-        dash = pd.DataFrame([['\\hdashline'] + [''] * (df.shape[1]-1)], columns=df.columns)
-        grouped_rows.append(dash)
+    # cmask = group[group['method'].str.contains('CMask', na=False)]
+    # td = group[group['method'].str.contains('TD', na=False)]
+    # if not cmask.empty:
+    #     grouped_rows.append(highlight_group(cmask))
+    # if not td.empty:
+    grouped_rows.append(highlight_group(group))
+    # # Insert dashed line if both present
+    # if not cmask.empty and not td.empty:
+    #     dash = pd.DataFrame([['\\hdashline'] + [''] * (df.shape[1]-1)], columns=df.columns)
+    #     grouped_rows.append(dash)
 
 # Rebuild full table
 final_df = pd.concat(grouped_rows)
