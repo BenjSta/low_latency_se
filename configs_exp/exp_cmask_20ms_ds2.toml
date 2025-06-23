@@ -5,22 +5,22 @@ lr_start = 0.0005
 lr_stop = 0.00005
 lr_update_interval = 1000
 val_interval = 20000
-max_steps = 1000000
-num_workers = 14
+max_steps = 700000
+num_workers = 8
 data_distribution_seed = 1
 
 [model]
-hopsize = 10
-algorithmic_delay_nn=20
+hopsize = 160
+algorithmic_delay_nn=320
 winlen = 320
 method = "complex_filter"
 use_mlp = false
 num_filter_frames = 1
 learnable_transforms = true
-downsample_factor = 8
+downsample_factor = 2
 
 [model.crn_config]
-num_channels_encoder = [2, 17, 20, 23, 26]
+num_channels_encoder = [2, 43, 54, 65, 76]
 kernel_sizes = [[3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3], [3, 3]]
 fstride = 2
 n_gru_layers = 1
@@ -46,3 +46,10 @@ speech_rms_mu_and_sigma=[-20, 7]
 apply_noise=true
 rir_percentage=0.75
 spectral_augment = true
+
+
+
+
+
+
+
