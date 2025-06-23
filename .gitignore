@@ -176,3 +176,7 @@ directories.toml
 .vscode/*
 logs/*
 checkpoints/*
+**.png
+**.svg
+**.csv
+**.tex
