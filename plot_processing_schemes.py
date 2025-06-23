@@ -13,8 +13,8 @@ analysis_window, synthesis_window = asymmetric_hann_window_pair(
     analysis_window_length, synthesis_window_length
 )
 
-# Also generate standard Hann window for synthesis
-hann_synthesis_window = np.hanning(synthesis_window_length)
+# # Also generate standard Hann window for synthesis
+# hann_synthesis_window = np.hanning(synthesis_window_length)
 
 # Generate dummy signal
 signal_length = (num_windows - 1) * hop_size + analysis_window_length
@@ -48,7 +48,7 @@ ax_synth_hann.plot(n_signal, dummy_signal * signal_mask2, color='gray', alpha=0.
 for i in range(num_windows):
     end = i * hop_size + analysis_window_length
     start = end - synthesis_window_length
-    ax_synth_hann.plot(np.arange(start, end), hann_synthesis_window, color='blue', alpha=0.7)
+    ax_synth_hann.plot(np.arange(start, end), synthesis_window, color='blue', alpha=0.7)
 
 for i in range(num_windows + 4):
     x = i * hop_size
@@ -75,6 +75,12 @@ plt.close()
 # === Analysis Plot with masked signal only (no windows) ===
 fig, ax_analysis_mask = plt.subplots(figsize=(10, 3))
 ax_analysis_mask.plot(n_signal, dummy_signal * signal_mask1, color='gray', alpha=0.5)
+
+for i in range(num_windows):
+    end = i * hop_size + analysis_window_length
+    start = end - analysis_window_length    
+    ax_analysis_mask.plot(np.arange(start, end), analysis_window, color='red', alpha=0.7)
+
 
 for i in range(num_windows + 4):
     x = i * hop_size
