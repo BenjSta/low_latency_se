@@ -173,26 +173,46 @@ def main():
 
     if resume:
         try:
+
+            
+
+
+            
+            
+            # # give file permissions back to the user currently running the script
+            
+            # # make sure to rename the file after loading, so that writing on the original name is possible despite file permissions
+            # # remove any previous backup dirs
+            # if os.path.exists(chkpt_dir + '_backup2'):
+            #     os.system(f"rm -rf {chkpt_dir}_backup2")
+            # os.rename(chkpt_dir, chkpt_dir + "_backup2")
+
+            # # recursive copy of the directory
+            # os.system(f"cp -r {chkpt_dir}_backup2 {chkpt_dir}") # I am now the owner of the directory
+
             chkpt = torch.load(os.path.join(chkpt_dir, "latest"), weights_only=False)
-            
-            # give file permissions back to the user currently running the script
-            
-            # make sure to rename the file after loading, so that writing on the original name is possible despite file permissions
-            # remove any previous backup file
-            if os.path.exists(os.path.join(chkpt_dir, "latest_loaded_backup")):
-                os.remove(os.path.join(chkpt_dir, "latest_loaded_backup"))
-            os.rename(os.path.join(chkpt_dir, "latest"), os.path.join(chkpt_dir, "latest_loaded_backup"))
-            # now saving should be possible again
-            torch.save(chkpt, os.path.join(chkpt_dir, "latest"))
 
-            # do the same for the best checkpoint
-            best_chkpt = torch.load(os.path.join(chkpt_dir, "best"), weights_only=False)
-            if os.path.exists(os.path.join(chkpt_dir, "best_loaded_backup")):
-                os.remove(os.path.join(chkpt_dir, "best_loaded_backup"))
+            # # do the same for the logs directory
+            # log_dir = os.path.join(pathconfig["chkpt_logs_path"], "logs", config["train_name"])
+            # if os.path.exists(log_dir + '_backup2'):
+            #     os.system(f"rm -rf {log_dir}_backup2")
+            # os.rename(log_dir, log_dir + '_backup2') 
+            # os.system(f"cp -r {log_dir}_backup2 {log_dir}") # I am now the owner of the directory
 
-            os.rename(os.path.join(chkpt_dir, "best"), os.path.join(chkpt_dir, "best_loaded_backup"))
+
+            # copy the directory and modify file ownership 
             
-            torch.save(best_chkpt, os.path.join(chkpt_dir, "best"))
+            # # now saving should be possible again
+            # torch.save(chkpt, os.path.join(chkpt_dir, "latest"))
+
+            # # do the same for the best checkpoint
+            # best_chkpt = torch.load(os.path.join(chkpt_dir, "best"), weights_only=False)
+            # if os.path.exists(os.path.join(chkpt_dir, "best_loaded_backup")):
+            #     os.remove(os.path.join(chkpt_dir, "best_loaded_backup"))
+
+            # os.rename(os.path.join(chkpt_dir, "best"), os.path.join(chkpt_dir, "best_loaded_backup"))
+            
+            # torch.save(best_chkpt, os.path.join(chkpt_dir, "best"))
 
             optim.load_state_dict(chkpt["optim"])
             denoise_net.load_state_dict(chkpt["denoiser"])
@@ -468,9 +488,9 @@ def test_model(
     mean_distillmos = np.mean(lengths_all * np.array(distillmos_all)) / np.mean(lengths_all)
     mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
 
-    # remove previous mean_metrics.txt if it exists
-    if os.path.exists(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt")):
-        os.remove(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"))
+    # # remove previous mean_metrics.txt if it exists
+    # if os.path.exists(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt")):
+    #     os.remove(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"))
 
     with open(os.path.join(log_dir, "synthetic_test", "mean_metrics.txt"), "w") as f:
         f.write(
@@ -483,8 +503,8 @@ def test_model(
     header = "Index, PESQ, SI-SDR, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.arange(0, metrics.shape[0]), metrics))
 
-    if os.path.exists(os.path.join(log_dir, "synthetic_test", "metrics.csv")):
-        os.remove(os.path.join(log_dir, "synthetic_test", "metrics.csv"))
+    # if os.path.exists(os.path.join(log_dir, "synthetic_test", "metrics.csv")):
+    #     os.remove(os.path.join(log_dir, "synthetic_test", "metrics.csv"))
 
     np.savetxt(
         os.path.join(log_dir, "synthetic_test", "metrics.csv"),
@@ -530,8 +550,8 @@ def test_model(
     mean_xlsr_sqa_mos = np.mean(lengths_all * np.array(xlsrmos_all)) / np.mean(lengths_all)
 
     # remove previous mean_metrics.txt if it exists
-    if os.path.exists(os.path.join(log_dir, "blind_test", "mean_metrics.txt")):
-        os.remove(os.path.join(log_dir, "blind_test", "mean_metrics.txt"))
+    # if os.path.exists(os.path.join(log_dir, "blind_test", "mean_metrics.txt")):
+    #     os.remove(os.path.join(log_dir, "blind_test", "mean_metrics.txt"))
 
     with open(os.path.join(log_dir, "blind_test", "mean_metrics.txt"), "w") as f:
         f.write(
@@ -543,8 +563,8 @@ def test_model(
     header = "filepath, DNSMOS-OVR, DNSMOS-SIG, DNSMOS-BAK, DistillMOS, XLS-R-MOS"
     data = np.column_stack((np.array(blind_test_files, dtype=object), metrics))
 
-    if os.path.exists(os.path.join(log_dir, "blind_test", "metrics.csv")):
-        os.remove(os.path.join(log_dir, "blind_test", "metrics.csv"))
+    # if os.path.exists(os.path.join(log_dir, "blind_test", "metrics.csv")):
+    #     os.remove(os.path.join(log_dir, "blind_test", "metrics.csv"))
 
     np.savetxt(
         os.path.join(log_dir, "blind_test", "metrics.csv"),
@@ -556,4 +576,14 @@ def test_model(
 
 
 if __name__ == "__main__":
-    main()
+    pathconfig = toml.load("directories.toml")
+
+    # run the main function and set permissions to global before exiting
+    try:
+        main()
+    except Exception as e:
+        print('Main function unexpextedly terminated with error:', e)
+    finally:
+        # set permissions to global for possibly newly created directories
+        os.system(f"chmod -R 777 {pathconfig['chkpt_logs_path']}")
+        print("Permissions set to global for checkpoints and logs directories.")    
