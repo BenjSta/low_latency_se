@@ -163,7 +163,7 @@ def main():
     scheduler = torch.optim.lr_scheduler.StepLR(
         optim,
         config["lr_update_interval"],
-        gamma=(config["lr_stop"] / config["lr_start"]) ** (1 / (config["max_steps"]/config["lr_update_interval"])),
+        gamma=(config["lr_stop"] / config["lr_start"]) ** (1 / (700000/config["lr_update_interval"])),
     )
 
     chkpt_dir = os.path.join(
