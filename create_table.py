@@ -18,32 +18,30 @@ configs = [
     # (config_name, algorithmic_delay, inference_interval, method)
     ("dfnet", 40, 10, 'DF (DFNet)'),
     ("exp_cmask_40ms_multiframe_lookahead", 40, 10, 'DF'),
-    ("exp_cmask_10ms_ds2", 10, 10, 'CMask'),
-    ("exp_cmask_10ms_ds4", 10, 20, 'CMask'),
-    ("exp_cmask_5ms_ds2", 5, 5, 'CMask'),
-    ("exp_td_5ms_interval10", 5, 10, 'TD'),
-    ("exp_cmask_2_5ms_ds4", 2.5, 5, 'CMask'),
     ("exp_cmask_20ms", 20, 10, 'CMask'),
     ("exp_cmask_20ms_ds2", 20, 20, 'CMask'),
-    ("exp_td_2_5ms_interval5", 2.5, 5, 'TD'),
-    ("exp_td_2_5ms_interval10", 2.5, 10, 'TD'),
-    ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
-    ("exp_td_1_25ms_interval10", 1.25, 10, 'TD'),    
-    ("exp_td_-5ms_interval5", -5, 5, 'TD'),
     ("exp_td_20ms", 20, 10, 'TD'),
-    ("exp_td_20ms_interval20", 20, 20, 'TD'),
+    ("exp_td_20ms_interval20", 20, 20, 'TD'),    
+    ("exp_cmask_10ms_ds4", 10, 20, 'CMask'),
+    ("exp_cmask_10ms_ds2", 10, 10, 'CMask'),
     ("exp_cmask_10ms", 10, 5, 'CMask'),
-    ("exp_td_10ms_interval5", 10, 5, 'TD'),
-    ("exp_cmask_5ms_ds4", 5, 10, 'CMask'),
     ("exp_td_10ms_interval10", 10, 10, 'TD'),
+    ("exp_td_10ms_interval5", 10, 5, 'TD'),
+    ("exp_cmask_5ms_ds4", 5, 10, 'CMask'),    
+    ("exp_cmask_5ms_ds2", 5, 5, 'CMask'),
+    ("exp_td_5ms_interval10", 5, 10, 'TD'),
     ("exp_td_5ms_interval5", 5, 5, 'TD'),
-    ("exp_td_-5ms_interval5_big", -5, 5, 'TD'),
     ("exp_cmask_2_5ms_ds8", 2.5, 10, 'CMask'),
-    ("exp_td_1_25ms_interval10", 1.25, 10, 'TD'),
-    ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
-    ("exp_cmask_1_25ms_ds8", 1.25, 5, 'CMask'),
+    ("exp_cmask_2_5ms_ds4", 2.5, 5, 'CMask'),
+    ("exp_td_2_5ms_interval10", 2.5, 10, 'TD'),
+    ("exp_td_2_5ms_interval5", 2.5, 5, 'TD'),
     ("exp_cmask_1_25ms_ds16", 1.25, 10, 'CMask'),
-    
+    ("exp_cmask_1_25ms_ds8", 1.25, 5, 'CMask'),
+    ("exp_td_1_25ms_interval10", 1.25, 10, 'TD'),    
+    ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
+    ("exp_td_-5ms_interval5", -5, 5, 'TD'),
+    ("exp_td_-5ms_interval5_big", -5, 5, 'TD'),
+    ("exp_cmask_2_5ms_ds4_hs2_5ms", 2.5, 5, 'CMask'),
 ]
 
 # Convert to DataFrame
@@ -57,6 +55,15 @@ def get_channels(config_name):
         return None
     return config['model']['crn_config']['num_channels_encoder'][1:]
 
+def get_hopsize(config_name):
+    try:
+        config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
+    except FileNotFoundError:
+        print(f"Config file for {config_name} not found.")
+        return None
+    return round(config['model']['hopsize']/16,3) #convert to ms assuming 16kHz sampling rate
+
+df['hopsize'] = df['config_name'].apply(get_hopsize)
 df['channels'] = df['config_name'].apply(get_channels)
 
 df = df.sort_values(by=["algorithmic_delay", "method", "inference_interval"], ascending=[False, True, False]).reset_index(drop=True)
@@ -231,19 +238,22 @@ for (delay,), group in df.groupby(['algorithmic delay'], sort=False):
 # Rebuild full table
 final_df = pd.concat(grouped_rows)
 
+#reorder final_df columns
+final_df = final_df[['algorithmic delay', 'inference interval', 'hopsize', 'method', 'channels'] + 
+                     synthetic_metrics + blind_metrics + [combined_metric]]
 # Column headers
 header_main = [
-    r'\textbf{Delay}', r'\textbf{Interval}', r'\textbf{Method}', r'\textbf{Channels}',
+    r'\textbf{Delay}', r'\textbf{Interval}', r'\textbf{Hopsize}', r'\textbf{Method}', r'\textbf{Channels}',
     r'\multicolumn{5}{c}{\textbf{Synthetic Test}}',
     r'\multicolumn{3}{c}{\textbf{Blind Test}}',
     r'\textbf{Combined}'
 ]
-header_sub = ['', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
+header_sub = ['', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
              ['DNSMOS', 'DistillMOS', 'XLS-R'] + ['']
 
 # Build LaTeX table
 latex_lines = []
-latex_lines.append(r'\begin{tabular}{llllrrrrrrrrrr}')
+latex_lines.append(r'\begin{tabular}{lllllrrrrrrrrrr}')
 latex_lines.append(r'\toprule')
 latex_lines.append(' & '.join(header_main) + r' \\')
 latex_lines.append(' & '.join(header_sub) + r' \\')
@@ -251,7 +261,7 @@ latex_lines.append(r'\midrule')
 
 current_group = None
 for idx, row in final_df.iterrows():
-    if str(row[0]).startswith('\\hdashline'):
+    if str(row.iloc[0]).startswith('\\hdashline'):
         latex_lines.append(r'\hdashline')
         continue
 
