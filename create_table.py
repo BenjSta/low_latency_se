@@ -51,7 +51,7 @@ configs = [
 ]
 
 # Convert to DataFrame
-df = pd.DataFrame(configs, columns=["config_name", "algorithmic_delay", "inference_interval", "method"])
+df = pd.DataFrame(configs, columns=["config_name", "nn_delay", "inference_interval", "method"])
 
 def get_channels(config_name):
     try:
@@ -69,10 +69,51 @@ def get_hopsize(config_name):
         return None
     return round(config['model']['hopsize']/16,3) #convert to ms assuming 16kHz sampling rate
 
+def get_total_delay(config_name):
+    try:
+        config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
+    except FileNotFoundError:
+        print(f"Config file for {config_name} not found.")
+        return None
+    
+    if 'cmask' in config_name:
+        nn_delay = config['model']['algorithmic_delay_nn']
+        hop_size = config['model']['hopsize']
+        ds_fact = config['model']['downsample_factor']
+        inf_interval = ds_fact*hop_size
+        total_delay = max((nn_delay+inf_interval, 3*hop_size))
+        return round(total_delay/16,3)
+        
+    elif 'td' in config_name:
+        nn_delay = config['model']['algorithmic_delay_nn']
+        hop_size = config['model']['hopsize']
+        total_delay = max((nn_delay, 2*hop_size))
+        return round(total_delay/16,3)
+    else:
+        raise FileNotFoundError        
+    
+def get_filter_delay(config_name):
+    try:
+        config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
+    except FileNotFoundError:
+        print(f"Config file for {config_name} not found.")
+        return None
+    
+    if 'cmask' in config_name:
+        return _
+        
+    elif 'td' in config_name:
+        filtering_delay = config['model']['algorithmic_delay_filtering']
+        return round(filtering_delay/16, 3)
+    else:
+        raise FileNotFoundError     
+
+df['total_delay'] = df['config_name'].apply(get_total_delay)
+df['filter_delay'] = df['config_name'].apply(get_filter_delay)
 df['hopsize'] = df['config_name'].apply(get_hopsize)
 df['channels'] = df['config_name'].apply(get_channels)
 
-df = df.sort_values(by=["algorithmic_delay", "method", "inference_interval"], ascending=[False, True, False]).reset_index(drop=True)
+df = df.sort_values(by=["nn_delay", "method", "inference_interval"], ascending=[False, True, False]).reset_index(drop=True)
 print(df)
 
 def get_metrics(config_name):
@@ -191,10 +232,10 @@ import numpy as np
 df.columns = df.columns.str.replace('_', ' ')
 
 # Remove config name column
-df = df.drop(columns=['config name'])
+#df = df.drop(columns=['config name'])
 
 # Sort by Delay (descending), then Inference Interval (descending)
-df = df.sort_values(by=['algorithmic delay', 'method', 'inference interval'], ascending=[False, True, False])
+df = df.sort_values(by=['total delay', 'method', 'inference interval'], ascending=[False, True, False])
 
 # Define metrics
 synthetic_metrics = [
@@ -228,7 +269,7 @@ def highlight_group(sub_df):
 
 # Group by delay/interval/method
 grouped_rows = []
-for (delay,), group in df.groupby(['algorithmic delay'], sort=False):
+for (delay,), group in df.groupby(['total delay'], sort=False):
     # Subgroup by method (CMask vs TD)
     # cmask = group[group['method'].str.contains('CMask', na=False)]
     # td = group[group['method'].str.contains('TD', na=False)]
@@ -245,21 +286,21 @@ for (delay,), group in df.groupby(['algorithmic delay'], sort=False):
 final_df = pd.concat(grouped_rows)
 
 #reorder final_df columns
-final_df = final_df[['algorithmic delay', 'inference interval', 'hopsize', 'method', 'channels'] + 
+final_df = final_df[['config name','nn delay', 'filter delay', 'total delay', 'inference interval', 'hopsize', 'method', 'channels'] + 
                      synthetic_metrics + blind_metrics + [combined_metric]]
 # Column headers
 header_main = [
-    r'\textbf{Delay}', r'\textbf{Interval}', r'\textbf{Hopsize}', r'\textbf{Method}', r'\textbf{Channels}',
+    r'\textbf{Config Name}', r'\textbf{NN Delay}', r'\textbf{Filter Delay}', r'\textbf{Total Delay}', r'\textbf{Interval}', r'\textbf{Hopsize}', r'\textbf{Method}', r'\textbf{Channels}',
     r'\multicolumn{5}{c}{\textbf{Synthetic Test}}',
     r'\multicolumn{3}{c}{\textbf{Blind Test}}',
     r'\textbf{Combined}'
 ]
-header_sub = ['', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
+header_sub = ['', '', '', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
              ['DNSMOS', 'DistillMOS', 'XLS-R'] + ['']
 
 # Build LaTeX table
 latex_lines = []
-latex_lines.append(r'\begin{tabular}{lllllrrrrrrrrrr}')
+latex_lines.append(r'\begin{tabular}{llllllllrrrrrrrrrr}')
 latex_lines.append(r'\toprule')
 latex_lines.append(' & '.join(header_main) + r' \\')
 latex_lines.append(' & '.join(header_sub) + r' \\')
@@ -271,13 +312,14 @@ for idx, row in final_df.iterrows():
         latex_lines.append(r'\hdashline')
         continue
 
-    group_key = (row['algorithmic delay'])
+    group_key = (row['nn delay'])
     if group_key != current_group:
         if current_group is not None:
             latex_lines.append(r'\midrule')
         current_group = group_key
 
     latex_row = ' & '.join(str(x) for x in row.values) + r' \\'
+    latex_row = latex_row.replace('_',r'\_')
     latex_lines.append(latex_row)
 
 latex_lines.append(r'\bottomrule')
