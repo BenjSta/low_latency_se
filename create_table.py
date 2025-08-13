@@ -13,6 +13,8 @@ _, txt_val, txt_test = paths["txt"]
 noise_train, noise_val, noise_test = paths["noise"]
 rir_train, rir_val, rir_test = paths["rir"]
 
+
+group_column = 'total delay'#'nn delay'
 # Define configs as tuples for compactness
 configs = [
     # (config_name, algorithmic_delay, inference_interval, method)
@@ -269,7 +271,7 @@ def highlight_group(sub_df):
 
 # Group by delay/interval/method
 grouped_rows = []
-for (delay,), group in df.groupby(['total delay'], sort=False):
+for (delay,), group in df.groupby([group_column], sort=False):
     # Subgroup by method (CMask vs TD)
     # cmask = group[group['method'].str.contains('CMask', na=False)]
     # td = group[group['method'].str.contains('TD', na=False)]
@@ -312,7 +314,7 @@ for idx, row in final_df.iterrows():
         latex_lines.append(r'\hdashline')
         continue
 
-    group_key = (row['nn delay'])
+    group_key = (row[group_column])
     if group_key != current_group:
         if current_group is not None:
             latex_lines.append(r'\midrule')
