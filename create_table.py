@@ -41,7 +41,13 @@ configs = [
     ("exp_td_1_25ms_interval5", 1.25, 5, 'TD'),
     ("exp_td_-5ms_interval5", -5, 5, 'TD'),
     ("exp_td_-5ms_interval5_big", -5, 5, 'TD'),
-    ("exp_cmask_2_5ms_ds4_hs2_5ms", 2.5, 5, 'CMask'),
+    ("exp_cmask_2_5ms_ds4_hs2_5ms", 2.5, 10, 'CMask'),
+    ("exp_cmask_2_5ms_ds2_hs2_5ms", 2.5, 10, 'CMask'),
+    ("exp_td_2_5ms_interval5_filt7_5ms", 2.5, 5, 'TD'),
+    ("exp_td_5ms_interval2_5_filt7_5ms", 5, 2.5, 'TD'),
+    ("exp_td_5ms_interval2_5_filt5ms", 5, 2.5, 'TD'),
+    ("exp_cmask_5ms_ds1_hs2_5ms", 5, 2.5, 'CMask')
+
 ]
 
 # Convert to DataFrame
