@@ -79,7 +79,7 @@ def main():
     
     print("GMacs/s", macs / 10**9)
     print("M Params", params / 10**6)
-    denoise_net.to(device)
+    denoise_net.to(device) 
 
     resume = args.resume
     validate_only = args.validate_no_training
