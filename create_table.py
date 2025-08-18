@@ -14,7 +14,7 @@ noise_train, noise_val, noise_test = paths["noise"]
 rir_train, rir_val, rir_test = paths["rir"]
 
 
-group_column = 'total delay'#'nn delay'
+group_column = 'nn delay'#'nn delay'
 # Define configs as tuples for compactness
 configs = [
     # (config_name, algorithmic_delay, inference_interval, method)
@@ -48,8 +48,12 @@ configs = [
     ("exp_td_2_5ms_interval5_filt7_5ms", 2.5, 5, 'TD'),
     ("exp_td_5ms_interval2_5_filt7_5ms", 5, 2.5, 'TD'),
     ("exp_td_5ms_interval2_5_filt5ms", 5, 2.5, 'TD'),
-    ("exp_cmask_5ms_ds1_hs2_5ms", 5, 2.5, 'CMask')
-
+    ("exp_cmask_5ms_ds1_hs2_5ms", 5, 2.5, 'CMask'),
+    ("exp_cmask_2_5ms_ds2_hs2_5ms", 2.5,5, 'CMask'),
+    ("exp_cmask_-2_5ms_ds4_hs2_5ms", -2.5, 10, 'CMask'),
+    ("exp_td_-2_5ms_interval10_filt7_5ms", -2.5,10, 'TD'),
+    ("exp_cmask_2_5ms_ds2_hs1_25ms", 2.5, 2.5, 'CMask'),
+    ("exp_td_2_5ms_interval2_5_filt2_5ms", 2.5, 2.5, 'TD')
 ]
 
 # Convert to DataFrame
@@ -297,7 +301,7 @@ header_main = [
     r'\multicolumn{3}{c}{\textbf{Blind Test}}',
     r'\textbf{Combined}'
 ]
-header_sub = ['', '', '', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
+header_sub = ['', '', '', '', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
              ['DNSMOS', 'DistillMOS', 'XLS-R'] + ['']
 
 # Build LaTeX table
@@ -322,6 +326,7 @@ for idx, row in final_df.iterrows():
 
     latex_row = ' & '.join(str(x) for x in row.values) + r' \\'
     latex_row = latex_row.replace('_',r'\_')
+    latex_row = latex_row.replace('nan','-')
     latex_lines.append(latex_row)
 
 latex_lines.append(r'\bottomrule')
