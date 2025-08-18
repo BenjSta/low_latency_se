@@ -63,24 +63,33 @@ def get_channels(config_name):
     try:
         config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
     except FileNotFoundError:
-        print(f"Config file for {config_name} not found.")
-        return None
+        try: 
+            config = toml.load(os.path.join('configs_exp','to_train', config_name + '.toml'))
+        except FileNotFoundError:
+            print(f"Config file for {config_name} not found.")
+            return None
     return config['model']['crn_config']['num_channels_encoder'][1:]
 
 def get_hopsize(config_name):
     try:
         config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
     except FileNotFoundError:
-        print(f"Config file for {config_name} not found.")
-        return None
+        try: 
+            config = toml.load(os.path.join('configs_exp','to_train', config_name + '.toml'))
+        except FileNotFoundError:
+            print(f"Config file for {config_name} not found.")
+            return None
     return round(config['model']['hopsize']/16,3) #convert to ms assuming 16kHz sampling rate
 
 def get_total_delay(config_name):
     try:
         config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
     except FileNotFoundError:
-        print(f"Config file for {config_name} not found.")
-        return None
+        try: 
+            config = toml.load(os.path.join('configs_exp','to_train', config_name + '.toml'))
+        except FileNotFoundError:
+            print(f"Config file for {config_name} not found.")
+            return None
     
     if 'cmask' in config_name:
         nn_delay = config['model']['algorithmic_delay_nn']
@@ -102,8 +111,11 @@ def get_filter_delay(config_name):
     try:
         config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
     except FileNotFoundError:
-        print(f"Config file for {config_name} not found.")
-        return None
+        try: 
+            config = toml.load(os.path.join('configs_exp','to_train', config_name + '.toml'))
+        except FileNotFoundError:
+            print(f"Config file for {config_name} not found.")
+            return None
     
     if 'cmask' in config_name:
         return _
@@ -119,7 +131,7 @@ df['filter_delay'] = df['config_name'].apply(get_filter_delay)
 df['hopsize'] = df['config_name'].apply(get_hopsize)
 df['channels'] = df['config_name'].apply(get_channels)
 
-df = df.sort_values(by=["nn_delay", "method", "inference_interval"], ascending=[False, True, False]).reset_index(drop=True)
+df = df.sort_values(by=["nn_delay", "total_delay", "method", "inference_interval"], ascending=[False, False, True, False]).reset_index(drop=True)
 print(df)
 
 def get_metrics(config_name):
