@@ -115,7 +115,7 @@ def analyze_model(config_path, cuda_visible_devices="0"):
         "total_delay": total_delay,
         "inf_interval": inf_interval,
         "hopsize": hop_size,
-        "channels": config["model"]["crn_config"].get("num_channels_encoder"),
+        "channels": config["model"]["crn_config"].get("num_channels_encoder")[1:],
         "method": method_str,
         "macs": macs,
         "params": params,
@@ -133,7 +133,8 @@ def export_latex_table(results, output_path="results.tex"):
 
     header = (
         "\\begin{tabular}{lcccccc|ccc}\n"
-        "Config & NN Delay & Filter Delay & Total Delay & Inf Interval & Hopsize & Channels & GMACs & M Params & M Train Step \\\\ \\ \hline\n"
+        "Config & NN Delay & Filter Delay & Total Delay & Inf Interval & Hopsize & Channels & GMACs & M Params & M Train Step \\\\"
+        "\\ \hline"
     )
 
     rows = []

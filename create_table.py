@@ -14,7 +14,7 @@ noise_train, noise_val, noise_test = paths["noise"]
 rir_train, rir_val, rir_test = paths["rir"]
 
 
-group_column = 'nn delay'#'nn delay'
+group_column = 'alg delay'#'total delay'#'total delay'
 # Define configs as tuples for compactness
 configs = [
     # (config_name, algorithmic_delay, inference_interval, method)
@@ -53,7 +53,21 @@ configs = [
     ("exp_cmask_-2_5ms_ds4_hs2_5ms", -2.5, 10, 'CMask'),
     ("exp_td_-2_5ms_interval10_filt7_5ms", -2.5,10, 'TD'),
     ("exp_cmask_2_5ms_ds2_hs1_25ms", 2.5, 2.5, 'CMask'),
-    ("exp_td_2_5ms_interval2_5_filt2_5ms", 2.5, 2.5, 'TD')
+    ("exp_td_2_5ms_interval2_5_filt2_5ms", 2.5, 2.5, 'TD'),
+    ("exp_cmask_2_5ms_ds1_hs1_25ms", 2.5, 1.25, 'CMask'),
+    ("exp_td_1_25ms_interval2_5_filt3_75ms", 1.25, 2.5, 'TD'),
+    ("exp_td_-1_25ms_interval5_filt3_75ms", -1.25, 5, 'TD'),
+    ("exp_cmask_-1_25ms_ds4_hs1_25ms", -1.25, 5, 'CMask'),
+    ("exp_cmask_-6_25ms_d8_hs1_25ms", -6.25, 10, 'CMask'),
+    ("exp_td_-6_25ms_interval10_filt3_75ms", -6.25, 10, 'TD'),
+    ("exp_td_-0_625ms_interval2_5_filt1_875ms", -0.625, 2.5, 'TD'),
+    ("exp_cmask_-0_625ms_ds4_hs0_625ms", -0.625, 2.5, 'CMask'),
+    ("exp_td_-3_125ms_interval5_filt1_875ms", -3.125, 5, 'TD'),
+    ("exp_cmask_-3_125ms_ds8_hs0_625ms", -3.125, 5, 'CMask'),
+    ("exp_td_-8_125ms_interval10_filt1_875ms", -8.125, 10, 'TD'),
+    ("exp_cmask_-8_125ms_ds16_hs0_625ms", -8.125, 10, 'CMask'),
+    
+    
 ]
 
 # Convert to DataFrame
@@ -90,23 +104,48 @@ def get_total_delay(config_name):
         except FileNotFoundError:
             print(f"Config file for {config_name} not found.")
             return None
-    
+    fs_fact = config['fs'] / 1000  
     if 'cmask' in config_name:
         nn_delay = config['model']['algorithmic_delay_nn']
         hop_size = config['model']['hopsize']
         ds_fact = config['model']['downsample_factor']
         inf_interval = ds_fact*hop_size
         total_delay = max((nn_delay+inf_interval, 3*hop_size))
-        return round(total_delay/16,3)
+        return round(total_delay/fs_fact,3)
         
     elif 'td' in config_name:
         nn_delay = config['model']['algorithmic_delay_nn']
         hop_size = config['model']['hopsize']
-        total_delay = max((nn_delay, 2*hop_size))
-        return round(total_delay/16,3)
+        filter_delay = config['model']['algorithmic_delay_filtering']
+        total_delay = max((nn_delay+hop_size, filter_delay))
+        return round(total_delay/fs_fact,3)
     else:
         raise FileNotFoundError        
-    
+
+def get_alg_delay(config_name):
+    try:
+        config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
+    except FileNotFoundError:
+        try: 
+            config = toml.load(os.path.join('configs_exp','to_train', config_name + '.toml'))
+        except FileNotFoundError:
+            print(f"Config file for {config_name} not found.")
+            return None
+    fs_fact = config['fs'] / 1000  
+    if 'cmask' in config_name:
+        nn_delay = config['model']['algorithmic_delay_nn']
+        hop_size = config['model']['hopsize']
+        alg_delay = max((nn_delay, 2*hop_size))
+        return round(alg_delay/fs_fact,3)
+        
+    elif 'td' in config_name:
+        nn_delay = config['model']['algorithmic_delay_nn']
+        filter_delay = config['model']['algorithmic_delay_filtering']
+        alg_delay = max((nn_delay, filter_delay))
+        return round(alg_delay/fs_fact,3)
+    else:
+        raise FileNotFoundError   
+
 def get_filter_delay(config_name):
     try:
         config = toml.load(os.path.join('configs_exp', config_name + '.toml'))
@@ -116,22 +155,23 @@ def get_filter_delay(config_name):
         except FileNotFoundError:
             print(f"Config file for {config_name} not found.")
             return None
-    
+    fs_fact = config['fs'] / 1000
     if 'cmask' in config_name:
         return _
         
     elif 'td' in config_name:
         filtering_delay = config['model']['algorithmic_delay_filtering']
-        return round(filtering_delay/16, 3)
+        return round(filtering_delay/fs_fact, 3)
     else:
         raise FileNotFoundError     
 
 df['total_delay'] = df['config_name'].apply(get_total_delay)
 df['filter_delay'] = df['config_name'].apply(get_filter_delay)
+df['alg_delay'] = df['config_name'].apply(get_alg_delay)
 df['hopsize'] = df['config_name'].apply(get_hopsize)
 df['channels'] = df['config_name'].apply(get_channels)
 
-df = df.sort_values(by=["nn_delay", "total_delay", "method", "inference_interval"], ascending=[False, False, True, False]).reset_index(drop=True)
+df = df.sort_values(by=["alg_delay", "total_delay", "method", "inference_interval"], ascending=[False, False, True, False]).reset_index(drop=True)
 print(df)
 
 def get_metrics(config_name):
@@ -304,16 +344,16 @@ for (delay,), group in df.groupby([group_column], sort=False):
 final_df = pd.concat(grouped_rows)
 
 #reorder final_df columns
-final_df = final_df[['config name','nn delay', 'filter delay', 'total delay', 'inference interval', 'hopsize', 'method', 'channels'] + 
+final_df = final_df[['config name','nn delay', 'filter delay', 'alg delay', 'total delay', 'inference interval', 'hopsize', 'method', 'channels'] + 
                      synthetic_metrics + blind_metrics + [combined_metric]]
 # Column headers
 header_main = [
-    r'\textbf{Config Name}', r'\textbf{NN Delay}', r'\textbf{Filter Delay}', r'\textbf{Total Delay}', r'\textbf{Interval}', r'\textbf{Hopsize}', r'\textbf{Method}', r'\textbf{Channels}',
+    r'\textbf{Config Name}', r'\textbf{NN Delay}', r'\textbf{Filter Delay}', r'\textbf{Alg. Delay}', r'\textbf{Total Delay}', r'\textbf{Interval}', r'\textbf{Hopsize}', r'\textbf{Method}', r'\textbf{Channels}',
     r'\multicolumn{5}{c}{\textbf{Synthetic Test}}',
     r'\multicolumn{3}{c}{\textbf{Blind Test}}',
     r'\textbf{Combined}'
 ]
-header_sub = ['', '', '', '', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
+header_sub = ['', '', '', '', '', '', '', '', ''] + ['PESQ', 'SI-SDR', 'DNSMOS', 'DistillMOS', 'XLS-R'] + \
              ['DNSMOS', 'DistillMOS', 'XLS-R'] + ['']
 
 # Build LaTeX table
