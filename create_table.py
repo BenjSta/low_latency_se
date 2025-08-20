@@ -58,7 +58,7 @@ configs = [
     ("exp_td_1_25ms_interval2_5_filt3_75ms", 1.25, 2.5, 'TD'),
     ("exp_td_-1_25ms_interval5_filt3_75ms", -1.25, 5, 'TD'),
     ("exp_cmask_-1_25ms_ds4_hs1_25ms", -1.25, 5, 'CMask'),
-    ("exp_cmask_-6_25ms_d8_hs1_25ms", -6.25, 10, 'CMask'),
+    ("exp_cmask_-6_25ms_ds8_hs1_25ms", -6.25, 10, 'CMask'),
     ("exp_td_-6_25ms_interval10_filt3_75ms", -6.25, 10, 'TD'),
     ("exp_td_-0_625ms_interval2_5_filt1_875ms", -0.625, 2.5, 'TD'),
     ("exp_cmask_-0_625ms_ds4_hs0_625ms", -0.625, 2.5, 'CMask'),
