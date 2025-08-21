@@ -294,6 +294,7 @@ df.columns = df.columns.str.replace('_', ' ')
 
 # Sort by Delay (descending), then Inference Interval (descending)
 df = df.sort_values(by=['total delay', 'method', 'inference interval'], ascending=[False, True, False])
+#df = df.sort_values(by=['combined nonintrusive', 'method'], ascending=[True, True])
 
 # Define metrics
 synthetic_metrics = [

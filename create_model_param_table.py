@@ -134,7 +134,7 @@ def export_latex_table(results, output_path="results.tex"):
     header = (
         "\\begin{tabular}{lcccccc|ccc}\n"
         "Config & NN Delay & Filter Delay & Total Delay & Inf Interval & Hopsize & Channels & GMACs & M Params & M Train Step \\\\"
-        "\\ \hline"
+        "\\hline \n"
     )
 
     rows = []
@@ -149,6 +149,7 @@ def export_latex_table(results, output_path="results.tex"):
             if current_group is not None:
                 rows.append(r'\hline')
             current_group = group_key
+        row = row.replace('nan', '-')  # Escape underscores for LaTeX
         rows.append(row)
 
     footer = "\\end{tabular}"
